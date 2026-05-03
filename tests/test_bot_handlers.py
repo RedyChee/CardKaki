@@ -212,14 +212,6 @@ def test_format_wallet_keyboard_empty(catalog):
     assert "empty" in text.lower() or "no cards" in text.lower() or "haven't" in text.lower()
 
 
-def test_format_wallet_keyboard_remove_buttons(catalog):
-    _, kb = format_wallet_keyboard(["hsbc_revo", "uob_ppv"], catalog)
-    all_buttons = [btn for row in kb.inline_keyboard for btn in row]
-    data = [b.callback_data for b in all_buttons]
-    assert "ck:rm:hsbc_revo" in data
-    assert "ck:rm:uob_ppv" in data
-
-
 def test_format_wallet_keyboard_has_back_button(catalog):
     _, kb = format_wallet_keyboard(["hsbc_revo"], catalog)
     all_buttons = [btn for row in kb.inline_keyboard for btn in row]

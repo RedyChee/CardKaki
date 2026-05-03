@@ -157,17 +157,10 @@ def format_wallet_keyboard(
             lines.append(f"• {c.name if c else cid}")
         text = "\n".join(lines)
 
-    rows = [
-        [InlineKeyboardButton(
-            f"🗑️ {catalog[cid].name if cid in catalog else cid}",
-            callback_data=f"ck:rm:{cid}",
-        )]
-        for cid in card_ids
-    ]
-    rows.append([
+    rows = [[
         InlineKeyboardButton("🔍 Browse & Add", callback_data="ck:catalog"),
         InlineKeyboardButton("← Back", callback_data="ck:menu"),
-    ])
+    ]]
     return text, InlineKeyboardMarkup(rows)
 
 
