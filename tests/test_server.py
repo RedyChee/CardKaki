@@ -16,6 +16,7 @@ async def client():
     from cardkaki.server import app
 
     # Stub the bits the webhook handler reaches into.
+    app.state.ready = True
     app.state.secret = "test-secret"
     app.state.app_telegram = SimpleNamespace(
         bot=SimpleNamespace(),
