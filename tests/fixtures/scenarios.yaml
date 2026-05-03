@@ -1,0 +1,87 @@
+# Ship-gate scenarios. Each runs through parse() + recommend() and asserts
+# the top card matches expected_top. Locked as regression tests once the
+# rule engine is stable. Comments record the math behind each expectation.
+
+- id: groceries_local
+  text: "cold storage 45"
+  wallet: [hsbc_revo, uob_ppv, citi_pm]
+  expected_top: hsbc_revo
+  # HSBC Revo: contactless bonus → 45 * 4 = 180. UOB PPV: no match (mobile_contactless ≠ contactless) → base 18. Citi PM: 45 * 1.2 = 54.
+
+- id: travel_falls_to_base
+  text: "klook 320"
+  wallet: [hsbc_revo, dbs_altitude, uob_prvi]
+  expected_top: uob_prvi
+  # All 4mpd cards veto on travel_excluded. PRVI base 1.4 → 448 beats Altitude 1.3 → 416 and HSBC base 0.4 → 128.
+
+- id: travel_maybank_upset
+  text: "klook 320"
+  wallet: [hsbc_revo, uob_prvi, maybank_xl]
+  expected_top: maybank_xl
+  # Maybank XL is one of the rare SG cards that earns on travel agencies (MCC 4722). 320 * 4 = 1280.
+
+- id: fcy_overseas
+  text: "amazon 100 fcy"
+  wallet: [uob_prvi, dbs_altitude, citi_pm]
+  expected_top: uob_prvi
+  # Both PRVI 2.4 FCY and Altitude 2.2 FCY have no online bonus → base wins. PRVI 2.4 > Altitude 2.2.
+
+- id: fcy_maybank_base
+  text: "amazon 100 fcy"
+  wallet: [maybank_xl, citi_pm]
+  expected_top: maybank_xl
+  # Maybank FCY base 4mpd beats Citi PM FCY base 2.2.
+
+- id: dbs_woman_fcy_online
+  text: "amazon 200 fcy"
+  wallet: [dbs_woman, citi_pm]
+  expected_top: dbs_woman
+  # DBS Woman online bonus applies to FCY-online: 200 * 4 = 800. Citi PM base FCY 2.2 = 440.
+
+- id: uob_rounding_kills_small
+  text: "starbucks 9.99"
+  wallet: [uob_ppv, hsbc_revo]
+  expected_top: hsbc_revo
+  # UOB PPV: dining_local not in bonus → base 0.4 with floor_sgd_5(9.99)=5 → 2. HSBC: 9 * 4 = 36.
+
+- id: dining_local
+  text: "kopitiam 8"
+  wallet: [hsbc_revo, amex_kf]
+  expected_top: hsbc_revo
+  # HSBC dining bonus 32 mi vs Amex base 8 mi.
+
+- id: online_shopping_alpha_break
+  text: "shopee 200"
+  wallet: [dbs_woman, hsbc_revo]
+  expected_top: dbs_woman
+  # Both 4mpd, both 800 mi. Alpha break: DBS Woman's World < HSBC Revolution.
+
+- id: petrol_excludes_uob_ppv
+  text: "spc 80"
+  wallet: [uob_ppv, citi_rewards]
+  expected_top: citi_rewards
+  # UOB PPV bonus vetoed by petrol_uob_excluded → base 32. Citi Rewards has no petrol bonus → base 32. Tie; Citi Rewards wins alphabetic break.
+
+- id: dept_store_contactless
+  text: "uniqlo 60"
+  wallet: [hsbc_revo, citi_rewards]
+  expected_top: citi_rewards
+  # Both 4mpd → 240 mi tie. Alphabetic break: Citi Rewards < HSBC Revolution.
+
+- id: amex_grab
+  text: "grab ride 15"
+  wallet: [amex_kf, hsbc_revo]
+  expected_top: hsbc_revo
+  # HSBC Revo earns 4mpd on transport (60 mi); Amex KF earns 2mpd on grab (30 mi).
+
+- id: mcdonalds_fast_food_upset
+  text: "mcdonalds 15"
+  wallet: [hsbc_revo, amex_kf]
+  expected_top: amex_kf
+  # MCC 5814 fast-food vetoes HSBC Revo → base 6 mi. Amex base 1.1 → 16 mi (rounded down from 16.5).
+
+- id: maybank_dining_loses_to_hsbc
+  text: "starbucks 12"
+  wallet: [maybank_xl, hsbc_revo]
+  expected_top: hsbc_revo
+  # Both have dining bonus. Maybank floor_sgd_5(12)=10 → 40 mi. HSBC floor_sgd_1(12)=12 → 48 mi.
