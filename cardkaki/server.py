@@ -27,6 +27,16 @@ log = logging.getLogger("cardkaki")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.ready = False
+    app.state.app_telegram = None
+    app.state.secret = None
+
+    for var in ("TELEGRAM_BOT_TOKEN", "WEBHOOK_SECRET"):
+        if not os.environ.get(var):
+            log.error("FATAL: required environment variable %s is not set — bot will not start", var)
+            yield
+            return
+
     data_dir = Path(os.environ.get("DATA_DIR", "./data"))
     db_path = Path(os.environ.get("DB_PATH", "./data/users.sqlite"))
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -71,6 +81,7 @@ async def lifespan(app: FastAPI):
     app.state.app_telegram = application
     app.state.secret = secret
     app.state.scheduler = scheduler
+    app.state.ready = True
     try:
         yield
     finally:
@@ -85,6 +96,8 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/healthz")
 async def healthz() -> dict:
+    if not getattr(app.state, "ready", False):
+        raise HTTPException(status_code=503, detail="not ready — check TELEGRAM_BOT_TOKEN and WEBHOOK_SECRET env vars")
     return {"ok": True}
 
 
