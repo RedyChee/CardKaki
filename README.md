@@ -1,4 +1,4 @@
-# MilesBot 🛫
+# CardKaki 🛫
 
 > A Telegram bot that tells you which Singapore credit card to use at checkout — without the manual gymnastics of cross-referencing Milelion articles, MCC lists, and HeyMax.
 
@@ -217,14 +217,14 @@ Boring on purpose.
 ## Project layout
 
 ```
-milesbot/
+cardkaki/
 ├── README.md
 ├── pyproject.toml
 ├── .env.example
 ├── data/
 │   ├── cards.yaml            # the product, basically
 │   └── merchants.yaml        # community-growable
-├── milesbot/
+├── cardkaki/
 │   ├── __init__.py
 │   ├── models.py             # pydantic schemas
 │   ├── rule_engine.py        # pure functions
@@ -274,11 +274,11 @@ For me, not for VCs:
 
 ```bash
 git clone <repo>
-cd milesbot
+cd cardkaki
 cp .env.example .env             # add TELEGRAM_BOT_TOKEN
 uv sync                          # or pip install -e .
 pytest                           # all green before you do anything else
-python -m milesbot.server        # local dev with ngrok
+python -m cardkaki.server        # local dev with ngrok
 ```
 
 ## Inspirations & credits
