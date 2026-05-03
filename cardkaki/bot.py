@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Awaitable, Callable
 
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -267,13 +267,24 @@ async def _text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(reply, parse_mode="Markdown")
 
 
+_BOT_COMMANDS = [
+    BotCommand("start", "Set up your wallet and get started"),
+    BotCommand("help", "Show help and available commands"),
+    BotCommand("cards", "Manage your cards (add, list, remove, catalog)"),
+]
+
+
+async def _post_init(application: Application) -> None:
+    await application.bot.set_my_commands(_BOT_COMMANDS)
+
+
 def build_application(
     token: str,
     storage: Storage,
     cards: dict[str, Card],
     merchants: dict[str, list[str]],
 ) -> Application:
-    app = Application.builder().token(token).build()
+    app = Application.builder().token(token).post_init(_post_init).build()
     app.bot_data["storage"] = storage
     app.bot_data["cards"] = cards
     app.bot_data["merchants"] = merchants
