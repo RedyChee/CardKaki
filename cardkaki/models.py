@@ -12,8 +12,9 @@ class Rounding(BaseModel):
 class Bonus(BaseModel):
     model_config = ConfigDict(extra="forbid")
     rate_mpd: float
-    categories: list[str]
+    categories: list[str] = Field(default_factory=list)  # empty list = wildcard (any merchant qualifies)
     excluded_categories: list[str] = Field(default_factory=list)
+    applies_to_sgd: bool = True
     applies_to_fcy: bool = False
     cap_sgd: float | None = None
     cap_period: Literal[

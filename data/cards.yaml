@@ -1,0 +1,289 @@
+# CardKaki v1 — 11 cards. Each entry cites the Milelion review consulted.
+# Treat values as best-effort starter data; verify against current T&Cs.
+# Caps and min_spend_sgd are informational in v1 (not enforced) — that's v2.
+
+- id: hsbc_revo
+  name: HSBC Revolution
+  issuer: hsbc
+  network: visa
+  base_rate_mpd: 0.4
+  rounding: { method: floor_sgd_1 }
+  bonus:
+    - rate_mpd: 4.0
+      label: online or contactless
+      categories:
+        [online_shopping, dining_local, contactless, entertainment, dept_store,
+         shopping, transport, travel, grab]
+      excluded_categories:
+        [fast_food_excluded, travel_excluded, airline_excluded, public_transit_excluded,
+         wallet_topup, insurance_excluded, education_excluded, utilities_excluded,
+         govt_excluded, tax_excluded, hospital_excluded, charity_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: true
+      cap_sgd: 1000
+      cap_period: calendar_month
+  pool: hsbc_rewards
+  tracks_by: posting_date
+  fcy_fee: 0.0325
+  notes: "Marketed 4 mpd; effective 3.33 mpd via 30k:10k HSBC pts:KF conversion. v1 uses marketed. Source: milelion.com/2026/04/08/review-hsbc-revolution-card"
+
+- id: uob_ppv
+  name: UOB Preferred Platinum Visa
+  issuer: uob
+  network: visa
+  base_rate_mpd: 0.4
+  rounding: { method: floor_sgd_5, unis_per_block: 3.5 }
+  bonus:
+    - rate_mpd: 4.0
+      label: mobile contactless (Apple/Google/Samsung Pay)
+      categories: [mobile_contactless]
+      excluded_categories:
+        [petrol_uob_excluded, charity_excluded, education_excluded, govt_excluded,
+         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      cap_sgd: 600
+      cap_period: calendar_month
+    - rate_mpd: 4.0
+      label: online retail/grocery/food-delivery/entertainment
+      categories: [online_shopping, dining_delivery, entertainment]
+      excluded_categories:
+        [travel_excluded, charity_excluded, education_excluded, govt_excluded,
+         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      cap_sgd: 600
+      cap_period: calendar_month
+  pool: uob_unis
+  tracks_by: posting_date
+  fcy_fee: 0.0325
+  notes: "Two sub-caps post-Oct 2025: S$600 mobile + S$600 online, tracked separately. Source: milelion.com/2026/03/29/review-uob-preferred-platinum-visa-card"
+
+- id: uob_vs
+  name: UOB Visa Signature
+  issuer: uob
+  network: visa
+  base_rate_mpd: 0.4
+  rounding: { method: floor_sgd_5, unis_per_block: 3.5 }
+  bonus:
+    - rate_mpd: 4.0
+      label: overseas/FCY (S$1k FCY/stmt-mo min)
+      categories: []   # empty = wildcard; combined with applies_to_fcy=true means any FCY transaction qualifies
+      excluded_categories:
+        [petrol_uob_excluded, charity_excluded, education_excluded, govt_excluded,
+         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      applies_to_sgd: false
+      applies_to_fcy: true
+      cap_sgd: 1200
+      cap_period: statement_month
+      min_spend_sgd: 1000
+      min_spend_period: statement_month
+    - rate_mpd: 4.0
+      label: petrol + contactless (S$1k SGD/stmt-mo min)
+      categories: [petrol, contactless]
+      excluded_categories:
+        [petrol_uob_excluded, charity_excluded, education_excluded, govt_excluded,
+         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: false
+      cap_sgd: 1200
+      cap_period: statement_month
+      min_spend_sgd: 1000
+      min_spend_period: statement_month
+  pool: uob_unis
+  tracks_by: posting_date
+  fcy_fee: 0.0325
+  notes: "Two independent bonus categories post-Sep 2025; min spend tracked separately per category. SPC officially excluded; Shell on paper excluded but works in practice. Source: milelion.com/2025/08/29/review-uob-visa-signature-card"
+
+- id: uob_prvi
+  name: UOB PRVI Miles
+  issuer: uob
+  network: visa
+  base_rate_mpd: 1.4
+  base_rate_mpd_fcy: 2.4
+  rounding: { method: floor_sgd_5, unis_per_block: 3.5 }
+  bonus:
+    - rate_mpd: 8.0
+      label: Agoda hotels (special landing page)
+      categories: [agoda]
+      excluded_categories:
+        [charity_excluded, education_excluded, govt_excluded, hospital_excluded,
+         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: true
+    - rate_mpd: 8.0
+      label: Expedia hotels/activities/cars
+      categories: [expedia]
+      excluded_categories:
+        [charity_excluded, education_excluded, govt_excluded, hospital_excluded,
+         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: true
+  pool: uob_unis
+  tracks_by: posting_date
+  fcy_fee: 0.0325
+  notes: "No cap. SE-Asian currency boost (3.0 FCY for IDR/MYR/THB/VND) not modeled in v1. Min S$5/txn. Source: milelion.com/2026/02/04/review-uob-prvi-miles-card"
+
+- id: uob_lady
+  name: UOB Lady's Card
+  issuer: uob
+  network: visa
+  base_rate_mpd: 0.4
+  rounding: { method: floor_sgd_5, unis_per_block: 3.5 }
+  bonus:
+    - rate_mpd: 4.0
+      label: chosen category (set per user — pass 'lady_chosen' in merchant categories)
+      categories: [lady_chosen]
+      excluded_categories:
+        [petrol_uob_excluded, charity_excluded, education_excluded, govt_excluded,
+         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      cap_sgd: 1000
+      cap_period: calendar_month
+  pool: uob_unis
+  tracks_by: posting_date
+  fcy_fee: 0.0325
+  notes: "v1 doesn't store user's chosen category — bonus only fires when caller passes 'lady_chosen' explicitly. Per-user choice is v2. No Milelion URL provided; encoded against general SG knowledge."
+
+- id: citi_rewards
+  name: Citi Rewards
+  issuer: citi
+  network: visa
+  base_rate_mpd: 0.4
+  rounding: { method: floor_sgd_1 }
+  bonus:
+    - rate_mpd: 4.0
+      label: online (excl. travel/wallet) + clothing/dept-store/shoes
+      categories: [online_shopping, shopping, dept_store]
+      excluded_categories:
+        [travel_excluded, airline_excluded, wallet_topup, public_transit_excluded,
+         utilities_excluded, govt_excluded, insurance_excluded, education_excluded,
+         hospital_excluded, charity_excluded, petrol]
+      applies_to_sgd: true
+      applies_to_fcy: true
+      cap_sgd: 1000
+      cap_period: statement_month
+  pool: citi_thankyou
+  tracks_by: transaction_date
+  fcy_fee: 0.0325
+  notes: "Statement month cap; bonus DOES apply to FCY in qualifying categories. Source: milelion.com/2026/02/27/review-citi-rewards-credit-card"
+
+- id: citi_pm
+  name: Citi PremierMiles
+  issuer: citi
+  network: visa
+  base_rate_mpd: 1.2
+  base_rate_mpd_fcy: 2.2
+  rounding: { method: floor_sgd_1 }
+  bonus:
+    - rate_mpd: 10.0
+      label: Kaligo (booking by 31 Dec 2025)
+      categories: [kaligo]
+      excluded_categories: []
+      applies_to_sgd: true
+      applies_to_fcy: true
+    - rate_mpd: 6.2
+      label: Agoda SGD
+      categories: [agoda]
+      excluded_categories: []
+      applies_to_sgd: true
+      applies_to_fcy: false
+    - rate_mpd: 7.2
+      label: Agoda FCY
+      categories: [agoda]
+      excluded_categories: []
+      applies_to_sgd: false
+      applies_to_fcy: true
+  pool: citi_miles
+  tracks_by: transaction_date
+  fcy_fee: 0.0325
+  notes: "Bonus rates valid by 31 Dec 2025 (stays till mid-2026). Source: milelion.com/2025/06/29/review-citi-premiermiles-card"
+
+- id: dbs_altitude
+  name: DBS Altitude
+  issuer: dbs
+  network: visa
+  base_rate_mpd: 1.3
+  base_rate_mpd_fcy: 2.2
+  rounding: { method: none }
+  bonus: []
+  pool: dbs_points
+  tracks_by: posting_date
+  fcy_fee: 0.0325
+  notes: "No bonus categories anymore — 3mpd hotels/air discontinued Aug 2023; Expedia/Kaligo discontinued Apr 2024. Base-only card. Source: milelion.com/2025/06/25/review-dbs-altitude-card"
+
+- id: dbs_woman
+  name: DBS Woman's World
+  issuer: dbs
+  network: visa
+  base_rate_mpd: 0.4
+  base_rate_mpd_fcy: 1.2
+  rounding: { method: floor_sgd_5 }
+  bonus:
+    - rate_mpd: 4.0
+      label: online (SGD or FCY)
+      categories: [online_shopping]
+      excluded_categories:
+        [wallet_topup, travel_excluded, education_excluded, govt_excluded,
+         hospital_excluded, insurance_excluded, utilities_excluded, charity_excluded,
+         online_banking_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: true
+      cap_sgd: 1000
+      cap_period: calendar_month
+  pool: dbs_points
+  tracks_by: posting_date
+  fcy_fee: 0.0325
+  notes: "FCY-online qualifies for 4mpd. Source: milelion.com/2025/08/09/review-dbs-womans-world-card"
+
+- id: amex_kf
+  name: Amex KrisFlyer
+  issuer: amex
+  network: amex
+  base_rate_mpd: 1.1
+  base_rate_mpd_fcy: 1.1
+  rounding: { method: floor_sgd_1 }
+  bonus:
+    - rate_mpd: 2.0
+      label: Singapore Airlines / Scoot / KrisShop / Pelago
+      categories: [sq_direct, scoot_direct, krisshop_direct, pelago_direct]
+      excluded_categories: []
+      applies_to_sgd: true
+      applies_to_fcy: true
+    - rate_mpd: 2.0
+      label: Grab Singapore (first S$200/cal-mo)
+      categories: [grab]
+      excluded_categories:
+        [public_transit_excluded, petrol_amex_excluded, wallet_topup,
+         charity_excluded, education_excluded, insurance_excluded, utilities_excluded,
+         hospital_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: false
+      cap_sgd: 200
+      cap_period: calendar_month
+  pool: direct_kf
+  tracks_by: posting_date
+  fcy_fee: 0.0325
+  notes: "Direct KrisFlyer credit; no conversion fee. SimplyGo (4111) and SPC excluded. Source: milelion.com/2025/11/18/review-amex-krisflyer-credit-card"
+
+- id: maybank_xl
+  name: Maybank XL Rewards
+  issuer: maybank
+  network: visa
+  base_rate_mpd: 0.4
+  base_rate_mpd_fcy: 4.0
+  rounding: { method: floor_sgd_5 }
+  bonus:
+    - rate_mpd: 4.0
+      label: dining + shopping + travel + entertainment (S$500/mo min spend)
+      categories:
+        [dining_local, dining_delivery, shopping, dept_store, travel, online_travel,
+         airline, entertainment]
+      excluded_categories:
+        [wallet_topup, utilities_excluded, insurance_excluded, govt_excluded,
+         charity_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: true
+      cap_sgd: 1000
+      cap_period: calendar_month
+      min_spend_sgd: 500
+      min_spend_period: calendar_month
+  pool: maybank_treats
+  tracks_by: posting_date
+  fcy_fee: 0.0325
+  notes: "FCY base 4mpd uncommon — earns on travel agencies (incl. klook). Min income S$30k; ages 21-39 only. Source: milelion.com/2025/08/18/review-maybank-xl-rewards-card"

@@ -1,0 +1,133 @@
+# Merchant -> internal categories. Mixes positive categories (groceries,
+# online_shopping, travel) with bank-specific exclusion signals
+# (travel_excluded, petrol_uob_excluded, wallet_topup, fast_food_excluded,
+# public_transit_excluded, etc.). Card bonus rules veto via excluded_categories.
+
+# --- groceries ---
+cold_storage:    [groceries, contactless]
+ntuc:            [groceries, contactless]
+fairprice:       [groceries, contactless]
+sheng_siong:     [groceries, contactless]
+giant:           [groceries, contactless]
+
+# --- online retail ---
+shopee:          [online_shopping]
+lazada:          [online_shopping]
+amazon:          [online_shopping]
+amazon_sg:       [online_shopping]
+qoo10:           [online_shopping]
+
+# --- ride hail / food delivery ---
+grab:            [transport, online_shopping, grab]
+grab_ride:       [transport, online_shopping, grab]
+grab_food:       [dining_delivery, online_shopping, grab]
+foodpanda:       [dining_delivery, online_shopping]
+deliveroo:       [dining_delivery, online_shopping]
+
+# --- travel & airlines ---
+# travel agencies: positive 'travel' category for cards that earn on it
+# (Maybank XL); 'travel_excluded' signal for cards that don't (HSBC Revo,
+# DBS Woman, Citi Rewards, UOB PPV).
+klook:           [travel, travel_excluded, online_travel]
+trip_com:        [travel, travel_excluded, online_travel]
+agoda:           [travel, travel_excluded, online_travel, agoda]
+expedia:         [travel, travel_excluded, online_travel, expedia]
+booking_com:     [travel, travel_excluded, online_travel]
+airbnb:          [travel, travel_excluded, online_travel]
+kaligo:          [travel, online_travel, kaligo]
+sia:             [airline, airline_excluded, travel, sq_direct]
+singaporeair:    [airline, airline_excluded, travel, sq_direct]
+scoot:           [airline, airline_excluded, travel, scoot_direct]
+
+# --- petrol ---
+spc:             [petrol, petrol_uob_excluded, petrol_amex_excluded]
+shell:           [petrol, petrol_uob_excluded]   # officially excluded by UOB VS but reportedly works
+caltex:          [petrol]
+esso:            [petrol]
+sinopec:         [petrol]
+
+# --- transit ---
+simplygo:        [transport, public_transit, public_transit_excluded]   # MCC 4111 — excluded by HSBC Revo, Amex KF
+
+# --- entertainment ---
+golden_village:  [entertainment, contactless]
+shaw:            [entertainment, contactless]
+cathay_cinema:   [entertainment, contactless]
+sistic:          [entertainment]
+ticketmaster:    [entertainment]
+
+# --- shopping / dept store ---
+uniqlo:          [shopping, dept_store, contactless]
+zara:            [shopping, dept_store, contactless]
+hm:              [shopping, dept_store, contactless]
+courts:          [shopping, dept_store, contactless]
+takashimaya:     [shopping, dept_store, contactless]
+tangs:           [shopping, dept_store, contactless]
+metro:           [shopping, dept_store, contactless]
+muji:            [shopping, dept_store, contactless]
+isetan:          [shopping, dept_store, contactless]
+harvey_norman:   [shopping, dept_store, contactless]
+
+# --- dining ---
+hawker:          [dining_local, contactless]
+kopitiam:        [dining_local, contactless]
+starbucks:       [dining_local, contactless]
+toast_box:       [dining_local, contactless]
+yakun:           [dining_local, contactless]
+mcdonalds:       [dining_local, contactless, fast_food_excluded]   # MCC 5814 — excluded by HSBC Revo
+kfc:             [dining_local, contactless, fast_food_excluded]
+burger_king:     [dining_local, contactless, fast_food_excluded]
+subway:          [dining_local, contactless, fast_food_excluded]
+
+# --- digital wallets / top-ups ---
+google_play:     [wallet_topup, online_shopping]
+apple_app_store: [wallet_topup, online_shopping]
+youtrip:         [wallet_topup]
+amaze:           [wallet_topup]
+revolut:         [wallet_topup]
+wise:            [wallet_topup]
+cardup:          [wallet_topup]
+ipaymy:          [wallet_topup]
+favepay:         [wallet_topup]
+grabpay_topup:   [wallet_topup]
+
+# --- utilities / telco / bills ---
+singtel:         [utilities_excluded, telco]
+m1:              [utilities_excluded, telco]
+starhub:         [utilities_excluded, telco]
+sp_group:        [utilities_excluded, utilities]
+
+# --- insurance / tax / govt / education ---
+income:          [insurance_excluded]
+ntuc_income:     [insurance_excluded]
+aia:             [insurance_excluded]
+prudential:      [insurance_excluded]
+great_eastern:   [insurance_excluded]
+manulife:        [insurance_excluded]
+iras:            [tax_excluded, govt_excluded]
+mom:             [govt_excluded]
+ica:             [govt_excluded]
+lta:             [govt_excluded]
+nlb:             [govt_excluded]
+moe:             [education_excluded]
+nus:             [education_excluded]
+ntu:             [education_excluded]
+smu:             [education_excluded]
+sutd:            [education_excluded]
+
+# --- hospitals ---
+sgh:             [hospital_excluded]
+nuh:             [hospital_excluded]
+ttsh:            [hospital_excluded]
+mt_elizabeth:    [hospital_excluded]
+gleneagles:      [hospital_excluded]
+
+# --- charity / online banking ---
+giving_sg:       [charity_excluded]
+community_chest: [charity_excluded]
+dbs_paylah:      [online_banking_excluded]
+paynow:          [online_banking_excluded]
+
+# --- amex/sq direct partners ---
+krisshop:        [krisshop_direct, online_shopping]
+pelago:          [pelago_direct, travel, online_travel]
