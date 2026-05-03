@@ -36,6 +36,17 @@ async def storage(tmp_path):
 # /cards handlers
 # ---------------------------------------------------------------------------
 
+async def test_cards_catalog_lists_all_ids(storage, catalog):
+    reply = await handle_cards_command(["catalog"], 1, storage, catalog)
+    for cid in catalog:
+        assert cid in reply
+
+
+async def test_cards_catalog_no_usage_instructions(storage, catalog):
+    reply = await handle_cards_command(["catalog"], 1, storage, catalog)
+    assert "Usage:" not in reply
+
+
 async def test_cards_list_empty(storage, catalog):
     reply = await handle_cards_command(["list"], 1, storage, catalog)
     assert "haven't added" in reply.lower()

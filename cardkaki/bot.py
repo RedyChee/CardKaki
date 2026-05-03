@@ -116,13 +116,21 @@ def format_card_list(card_ids: list[str], catalog: dict[str, Card]) -> str:
     return "\n".join(lines)
 
 
+def format_catalog(catalog: dict[str, Card]) -> str:
+    lines = ["Available cards:"]
+    for cid in sorted(catalog):
+        lines.append(f"• `{cid}` — {catalog[cid].name}")
+    return "\n".join(lines)
+
+
 def format_cards_help(catalog: dict[str, Card]) -> str:
     valid = ", ".join(f"`{cid}`" for cid in sorted(catalog))
     return (
         "Usage:\n"
         "  `/cards list` — show your wallet\n"
         "  `/cards add <id>` — add a card\n"
-        "  `/cards remove <id>` — drop a card\n\n"
+        "  `/cards remove <id>` — drop a card\n"
+        "  `/cards catalog` — list all available card ids\n\n"
         f"Valid ids: {valid}"
     )
 
@@ -155,6 +163,9 @@ async def handle_cards_command(
         if added:
             return f"✅ Added *{catalog[cid].name}* to your wallet."
         return f"Already in your wallet: *{catalog[cid].name}*."
+
+    if sub == "catalog":
+        return format_catalog(catalog)
 
     if sub == "remove":
         if len(args) < 2:
