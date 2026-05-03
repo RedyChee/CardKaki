@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Request
 from telegram import Update
 
 from .backup import run_backup
-from .bot import build_application
+from .bot import BOT_COMMANDS, build_application
 from .data import load_cards, load_merchants
 from .storage import Storage
 
@@ -50,6 +50,8 @@ async def lifespan(app: FastAPI):
     secret = os.environ["WEBHOOK_SECRET"]
     application = build_application(token, storage, cards, merchants)
     await application.initialize()
+    await application.bot.set_my_commands(BOT_COMMANDS)
+    log.info("registered %d bot commands with Telegram", len(BOT_COMMANDS))
 
     base = os.environ.get("WEBHOOK_BASE_URL")
     if base:
