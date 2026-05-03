@@ -30,6 +30,7 @@ WELCOME = (
     "👋 *CardKaki* — tells you which SG card to use at checkout.\n\n"
     "*Add a card:* `/cards add <id>`  e.g. `/cards add hsbc_revo`\n"
     "*List your cards:* `/cards list`\n"
+    "*Browse available cards:* `/cards catalog`\n"
     "*Remove:* `/cards remove <id>`\n\n"
     "Then send: `<merchant> <amount> [fcy]`\n"
     "e.g. `cold storage 45`  ·  `klook 320 fcy`\n\n"
