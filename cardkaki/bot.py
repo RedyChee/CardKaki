@@ -276,6 +276,7 @@ _BOT_COMMANDS = [
 
 async def _post_init(application: Application) -> None:
     await application.bot.set_my_commands(_BOT_COMMANDS)
+    log.info("registered %d bot commands with Telegram", len(_BOT_COMMANDS))
 
 
 def build_application(
