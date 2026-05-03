@@ -238,7 +238,7 @@ def test_format_catalog_keyboard_owned_marked(catalog):
     _, kb = format_catalog_keyboard(catalog, owned_ids=["hsbc_revo"])
     all_buttons = [btn for row in kb.inline_keyboard for btn in row]
     revo_btn = next(b for b in all_buttons if "hsbc_revo" in (b.callback_data or ""))
-    assert revo_btn.callback_data == "ck:own:hsbc_revo"
+    assert revo_btn.callback_data == "ck:rm:hsbc_revo"
     assert "✓" in revo_btn.text
 
 

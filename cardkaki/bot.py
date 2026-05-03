@@ -179,7 +179,7 @@ def format_catalog_keyboard(
     for cid in sorted(catalog):
         name = catalog[cid].name
         if cid in owned:
-            rows.append([InlineKeyboardButton(f"✓ {name}", callback_data=f"ck:own:{cid}")])
+            rows.append([InlineKeyboardButton(f"✓ {name}", callback_data=f"ck:rm:{cid}")])
         else:
             rows.append([InlineKeyboardButton(f"+ {name}", callback_data=f"ck:add:{cid}")])
     rows.append([
@@ -324,10 +324,7 @@ async def _cards_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         cid = data[6:]
         await storage.remove_card(user_id, cid)
         owned = await storage.list_cards(user_id)
-        text, kb = format_wallet_keyboard(owned, catalog)
-    elif data.startswith("ck:own:"):
-        await query.answer("Already in your wallet", show_alert=True)
-        return
+        text, kb = format_catalog_keyboard(catalog, owned)
     else:
         return
 
