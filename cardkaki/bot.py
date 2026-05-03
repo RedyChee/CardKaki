@@ -9,9 +9,10 @@ from __future__ import annotations
 import logging
 from typing import Awaitable, Callable
 
-from telegram import BotCommand, Update
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -136,6 +137,58 @@ def format_cards_help(catalog: dict[str, Card]) -> str:
     )
 
 
+def format_menu_keyboard() -> tuple[str, InlineKeyboardMarkup]:
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("📋 My Cards", callback_data="ck:wallet"),
+        InlineKeyboardButton("🔍 Browse & Add", callback_data="ck:catalog"),
+    ]])
+    return "📋 *CardKaki Wallet*\nManage your cards:", kb
+
+
+def format_wallet_keyboard(
+    card_ids: list[str], catalog: dict[str, Card]
+) -> tuple[str, InlineKeyboardMarkup]:
+    if not card_ids:
+        text = "Your wallet is empty — tap *Browse & Add* to add cards."
+    else:
+        lines = [f"Your wallet ({len(card_ids)} card{'s' if len(card_ids) != 1 else ''}):"]
+        for cid in card_ids:
+            c = catalog.get(cid)
+            lines.append(f"• {c.name if c else cid}")
+        text = "\n".join(lines)
+
+    rows = [
+        [InlineKeyboardButton(
+            f"🗑️ {catalog[cid].name if cid in catalog else cid}",
+            callback_data=f"ck:rm:{cid}",
+        )]
+        for cid in card_ids
+    ]
+    rows.append([
+        InlineKeyboardButton("🔍 Browse & Add", callback_data="ck:catalog"),
+        InlineKeyboardButton("← Back", callback_data="ck:menu"),
+    ])
+    return text, InlineKeyboardMarkup(rows)
+
+
+def format_catalog_keyboard(
+    catalog: dict[str, Card], owned_ids: list[str]
+) -> tuple[str, InlineKeyboardMarkup]:
+    owned = set(owned_ids)
+    rows = []
+    for cid in sorted(catalog):
+        name = catalog[cid].name
+        if cid in owned:
+            rows.append([InlineKeyboardButton(f"✓ {name}", callback_data=f"ck:own:{cid}")])
+        else:
+            rows.append([InlineKeyboardButton(f"+ {name}", callback_data=f"ck:add:{cid}")])
+    rows.append([
+        InlineKeyboardButton("📋 My Cards", callback_data="ck:wallet"),
+        InlineKeyboardButton("← Back", callback_data="ck:menu"),
+    ])
+    return "Available cards — tap to add:", InlineKeyboardMarkup(rows)
+
+
 # ---------------------------------------------------------------------------
 # Pure handlers (storage + catalog in, reply string out)
 # ---------------------------------------------------------------------------
@@ -238,17 +291,47 @@ async def _start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def _cards(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message or not update.effective_user:
+    if not update.message:
         return
+    text, kb = format_menu_keyboard()
+    await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+
+
+async def _cards_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not update.effective_user:
+        return
+    await query.answer()
+    user_id = update.effective_user.id
     storage: Storage = context.application.bot_data["storage"]
     catalog: dict[str, Card] = context.application.bot_data["cards"]
-    reply = await handle_cards_command(
-        list(context.args or []),
-        update.effective_user.id,
-        storage,
-        catalog,
-    )
-    await update.message.reply_text(reply, parse_mode="Markdown")
+    data = query.data or ""
+
+    if data == "ck:menu":
+        text, kb = format_menu_keyboard()
+    elif data == "ck:wallet":
+        owned = await storage.list_cards(user_id)
+        text, kb = format_wallet_keyboard(owned, catalog)
+    elif data == "ck:catalog":
+        owned = await storage.list_cards(user_id)
+        text, kb = format_catalog_keyboard(catalog, owned)
+    elif data.startswith("ck:add:"):
+        cid = data[7:]
+        await storage.add_card(user_id, cid)
+        owned = await storage.list_cards(user_id)
+        text, kb = format_catalog_keyboard(catalog, owned)
+    elif data.startswith("ck:rm:"):
+        cid = data[6:]
+        await storage.remove_card(user_id, cid)
+        owned = await storage.list_cards(user_id)
+        text, kb = format_wallet_keyboard(owned, catalog)
+    elif data.startswith("ck:own:"):
+        await query.answer("Already in your wallet", show_alert=True)
+        return
+    else:
+        return
+
+    await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
 
 async def _text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -287,5 +370,6 @@ def build_application(
     app.add_handler(CommandHandler("start", _start))
     app.add_handler(CommandHandler("help", _start))
     app.add_handler(CommandHandler("cards", _cards))
+    app.add_handler(CallbackQueryHandler(_cards_callback, pattern=r"^ck:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _text))
     return app

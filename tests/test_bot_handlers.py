@@ -4,7 +4,10 @@ import pytest
 
 from cardkaki.bot import (
     format_card_list,
+    format_catalog_keyboard,
+    format_menu_keyboard,
     format_recommendations,
+    format_wallet_keyboard,
     handle_cards_command,
     handle_text_message,
 )
@@ -182,3 +185,65 @@ def test_format_card_list_with_cards(catalog):
     out = format_card_list(["hsbc_revo", "uob_ppv"], catalog)
     assert "HSBC Revolution" in out
     assert "UOB Preferred Platinum Visa" in out
+
+
+# ---------------------------------------------------------------------------
+# Inline keyboard formatters
+# ---------------------------------------------------------------------------
+
+def test_format_menu_keyboard_has_two_buttons(catalog):
+    text, kb = format_menu_keyboard()
+    all_buttons = [btn for row in kb.inline_keyboard for btn in row]
+    labels = [b.text for b in all_buttons]
+    assert any("My Cards" in l for l in labels)
+    assert any("Browse" in l for l in labels)
+
+
+def test_format_menu_keyboard_button_data(catalog):
+    _, kb = format_menu_keyboard()
+    all_buttons = [btn for row in kb.inline_keyboard for btn in row]
+    data = {b.callback_data for b in all_buttons}
+    assert "ck:wallet" in data
+    assert "ck:catalog" in data
+
+
+def test_format_wallet_keyboard_empty(catalog):
+    text, kb = format_wallet_keyboard([], catalog)
+    assert "empty" in text.lower() or "no cards" in text.lower() or "haven't" in text.lower()
+
+
+def test_format_wallet_keyboard_remove_buttons(catalog):
+    _, kb = format_wallet_keyboard(["hsbc_revo", "uob_ppv"], catalog)
+    all_buttons = [btn for row in kb.inline_keyboard for btn in row]
+    data = [b.callback_data for b in all_buttons]
+    assert "ck:rm:hsbc_revo" in data
+    assert "ck:rm:uob_ppv" in data
+
+
+def test_format_wallet_keyboard_has_back_button(catalog):
+    _, kb = format_wallet_keyboard(["hsbc_revo"], catalog)
+    all_buttons = [btn for row in kb.inline_keyboard for btn in row]
+    data = [b.callback_data for b in all_buttons]
+    assert "ck:menu" in data
+
+
+def test_format_catalog_keyboard_add_buttons(catalog):
+    _, kb = format_catalog_keyboard(catalog, owned_ids=[])
+    all_buttons = [btn for row in kb.inline_keyboard for btn in row]
+    data = [b.callback_data for b in all_buttons]
+    assert "ck:add:hsbc_revo" in data
+
+
+def test_format_catalog_keyboard_owned_marked(catalog):
+    _, kb = format_catalog_keyboard(catalog, owned_ids=["hsbc_revo"])
+    all_buttons = [btn for row in kb.inline_keyboard for btn in row]
+    revo_btn = next(b for b in all_buttons if "hsbc_revo" in (b.callback_data or ""))
+    assert revo_btn.callback_data == "ck:own:hsbc_revo"
+    assert "✓" in revo_btn.text
+
+
+def test_format_catalog_keyboard_has_back_button(catalog):
+    _, kb = format_catalog_keyboard(catalog, owned_ids=[])
+    all_buttons = [btn for row in kb.inline_keyboard for btn in row]
+    data = [b.callback_data for b in all_buttons]
+    assert "ck:menu" in data
