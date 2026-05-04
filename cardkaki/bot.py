@@ -353,7 +353,8 @@ def format_pools(
     if shared_pools:
         lines.append("_Cards sharing a redemption pool:_")
         for p in shared_pools:
-            lines.append(f"  • {_pool_pretty(p)}: " + ", ".join(pool_groups[p]))
+            names_str = ", ".join(_md(n) for n in pool_groups[p])
+            lines.append(f"  • {_md(_pool_pretty(p))}: {names_str}")
 
     kb = None
     if sday_buttons:
@@ -749,6 +750,17 @@ async def handle_lady_choice_command(
 # PTB wiring
 # ---------------------------------------------------------------------------
 
+async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log.error("unhandled exception", exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "⚠️ Something went wrong processing your request. Check the server logs."
+            )
+        except Exception:
+            pass
+
+
 async def _start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message:
         await update.message.reply_text(WELCOME, parse_mode="Markdown")
@@ -1044,4 +1056,5 @@ def build_application(
     app.add_handler(CallbackQueryHandler(_sday_callback, pattern=r"^sday:"))
     app.add_handler(CallbackQueryHandler(_lc_callback, pattern=r"^lc:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _text))
+    app.add_error_handler(_error_handler)
     return app
