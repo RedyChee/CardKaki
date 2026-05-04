@@ -13,6 +13,7 @@ from datetime import date
 from typing import Awaitable, Callable
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -926,7 +927,11 @@ async def _cards_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     else:
         return
 
-    await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
+    try:
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
+    except BadRequest as e:
+        if "Message is not modified" not in str(e):
+            raise
     if added_card is not None:
         await _maybe_prompt_statement_day(update, context, added_card, user_id)
         await _maybe_prompt_anniversary(update, context, added_card, user_id)
