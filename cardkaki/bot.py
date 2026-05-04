@@ -32,6 +32,11 @@ from .usage import build_usage
 log = logging.getLogger(__name__)
 
 
+def _md(s: str) -> str:
+    """Escape Telegram Markdown V1 special chars in dynamic content."""
+    return s.replace("\\", "\\\\").replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
+
+
 WELCOME = (
     "👋 *CardKaki* — tells you which SG card to use at checkout.\n\n"
     "*Manage your wallet:* /cards\n"
@@ -107,14 +112,14 @@ def format_recommendations(
                     if x.startswith("⚠") or x.startswith("cap ")
                 ]
                 if relevant:
-                    rendered_lines.append(f"   {' · '.join(relevant)}")
+                    rendered_lines.append(f"   {' · '.join(_md(x) for x in relevant)}")
 
     return "\n".join(header_bits + rendered_lines)
 
 
 def _render_one(r: Recommendation) -> str:
-    head = f"*{r.card_name}*: {r.miles} mi ({r.effective_mpd:.1f} mpd)"
-    top_reason = r.reasons[0] if r.reasons else ""
+    head = f"*{_md(r.card_name)}*: {r.miles} mi ({r.effective_mpd:.1f} mpd)"
+    top_reason = _md(r.reasons[0]) if r.reasons else ""
     return f"{head}  {top_reason}".rstrip()
 
 
@@ -241,8 +246,8 @@ def format_log_confirmation(
     txn: TxnRow, card: Card, usage_after: dict[tuple[str, int], object] | None = None
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Reply text + buttons after logging a transaction."""
-    lines = [f"📝 Logged: *{card.name}*"]
-    bonus_part = f" ({txn.bonus_label})" if txn.bonus_label else " (base rate)"
+    lines = [f"📝 Logged: *{_md(card.name)}*"]
+    bonus_part = f" ({_md(txn.bonus_label)})" if txn.bonus_label else " (base rate)"
     fcy_part = " fcy" if txn.is_fcy else ""
     lines.append(
         f"`{txn.merchant} S${txn.amount_sgd:g}{fcy_part}` → {txn.miles_earned} mi{bonus_part}"
@@ -254,7 +259,7 @@ def format_log_confirmation(
             if bonus.cap_sgd is not None:
                 pct = int(round(u.spend_sgd / bonus.cap_sgd * 100))
                 lines.append(
-                    f"This period on {card.name} {bonus.label or ''}: "
+                    f"This period on {_md(card.name)} {_md(bonus.label or '')}: "
                     f"S${u.spend_sgd:g} / S${bonus.cap_sgd:g} ({pct}%)"
                 )
 
@@ -289,9 +294,9 @@ def format_pools(
             for b in card.bonus
         )
 
-        header = f"*{card.name}*"
+        header = f"*{_md(card.name)}*"
         if card.pool:
-            header += f"  _({_pool_pretty(card.pool)})_"
+            header += f"  _({_md(_pool_pretty(card.pool))})_"
         if needs_statement and s_day is None:
             header += "  ⚠ statement day not set"
             sday_buttons.append(
@@ -312,7 +317,7 @@ def format_pools(
             u = usage.get((card.id, idx))
             spend = u.spend_sgd if u is not None else 0.0
             min_used = u.min_spend_sgd if u is not None else 0.0
-            line_parts = [f"  {label}:"]
+            line_parts = [f"  {_md(label)}:"]
             cap_period = bonus.cap_period or "calendar_month"
             cycle = period_label(cap_period, today, s_day)
             if bonus.cap_sgd is not None:
@@ -382,7 +387,7 @@ def format_recent(
         cname = c.name if c else t.card_id
         fcy = " fcy" if t.is_fcy else ""
         line = (
-            f"{i}. {t.txn_date.strftime('%b %d')}  *{cname}*  "
+            f"{i}. {t.txn_date.strftime('%b %d')}  *{_md(cname)}*  "
             f"`{t.merchant} S${t.amount_sgd:g}{fcy}`  →  {t.miles_earned} mi"
         )
         lines.append(line)
@@ -394,7 +399,7 @@ def format_recent(
 
 def format_statement_day_prompt(card: Card) -> tuple[str, InlineKeyboardMarkup]:
     text = (
-        f"📅 *{card.name}* uses statement-month tracking.\n"
+        f"📅 *{_md(card.name)}* uses statement-month tracking.\n"
         "Tap your statement closing day (1–28). "
         "Skip to use calendar-month approximation."
     )
@@ -967,7 +972,7 @@ async def _sday_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     if action == "skip":
         await query.edit_message_text(
-            f"Using calendar-month approximation for *{card.name}*. "
+            f"Using calendar-month approximation for *{_md(card.name)}*. "
             "You can change later via /pools.",
             parse_mode="Markdown",
         )
@@ -982,7 +987,7 @@ async def _sday_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.edit_message_text(f"⚠️ {e}")
         return
     await query.edit_message_text(
-        f"✅ *{card.name}* statement closing day set to {day}.",
+        f"✅ *{_md(card.name)}* statement closing day set to {day}.",
         parse_mode="Markdown",
     )
 
