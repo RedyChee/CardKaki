@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -58,3 +60,30 @@ class Recommendation(BaseModel):
     miles: int
     effective_mpd: float
     reasons: list[str] = Field(default_factory=list)
+
+
+class TxnRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tx_id: str
+    telegram_user_id: int
+    card_id: str
+    bonus_idx: int | None
+    bonus_label: str | None
+    merchant: str
+    amount_sgd: float
+    is_fcy: bool
+    miles_earned: int
+    txn_date: date
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class BonusUsage:
+    """Period spend totals for a (card_id, bonus_idx) the user owns.
+
+    Both totals are computed from txns logged with that bonus_idx — meaning
+    txns that *qualified* for the bonus, regardless of whether they earned
+    bonus rate or fell to base (e.g. when min_spend wasn't yet met).
+    """
+    spend_sgd: float       # sum within current cap_period
+    min_spend_sgd: float   # sum within current min_spend_period

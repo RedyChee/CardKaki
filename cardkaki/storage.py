@@ -1,9 +1,13 @@
 """SQLite-backed user wallet store. Single-writer (the bot process)."""
 from __future__ import annotations
 
+import uuid
+from datetime import date, datetime
 from pathlib import Path
 
 import aiosqlite
+
+from .models import TxnRow
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -17,7 +21,62 @@ CREATE TABLE IF NOT EXISTS user_cards (
   PRIMARY KEY (telegram_user_id, card_id),
   FOREIGN KEY (telegram_user_id) REFERENCES users(telegram_user_id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS transactions (
+  tx_id TEXT PRIMARY KEY,
+  telegram_user_id INTEGER NOT NULL,
+  card_id TEXT NOT NULL,
+  bonus_idx INTEGER,
+  bonus_label TEXT,
+  merchant TEXT NOT NULL,
+  amount_sgd REAL NOT NULL,
+  is_fcy INTEGER NOT NULL DEFAULT 0,
+  miles_earned INTEGER NOT NULL,
+  txn_date TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (telegram_user_id) REFERENCES users(telegram_user_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_txns_user_date
+  ON transactions (telegram_user_id, txn_date);
+CREATE INDEX IF NOT EXISTS idx_txns_user_card_bonus_date
+  ON transactions (telegram_user_id, card_id, bonus_idx, txn_date);
+CREATE TABLE IF NOT EXISTS card_statement_days (
+  telegram_user_id INTEGER NOT NULL,
+  card_id TEXT NOT NULL,
+  statement_day INTEGER NOT NULL CHECK (statement_day BETWEEN 1 AND 28),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (telegram_user_id, card_id),
+  FOREIGN KEY (telegram_user_id) REFERENCES users(telegram_user_id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS lady_choices (
+  telegram_user_id INTEGER NOT NULL,
+  category TEXT NOT NULL,
+  effective_from TEXT NOT NULL,
+  PRIMARY KEY (telegram_user_id, effective_from),
+  FOREIGN KEY (telegram_user_id) REFERENCES users(telegram_user_id) ON DELETE CASCADE
+);
 """
+
+
+def _row_to_txn(row) -> TxnRow:
+    return TxnRow(
+        tx_id=row[0],
+        telegram_user_id=row[1],
+        card_id=row[2],
+        bonus_idx=row[3],
+        bonus_label=row[4],
+        merchant=row[5],
+        amount_sgd=row[6],
+        is_fcy=bool(row[7]),
+        miles_earned=row[8],
+        txn_date=date.fromisoformat(row[9]),
+        created_at=datetime.fromisoformat(row[10]),
+    )
+
+
+_TXN_COLS = (
+    "tx_id, telegram_user_id, card_id, bonus_idx, bonus_label, "
+    "merchant, amount_sgd, is_fcy, miles_earned, txn_date, created_at"
+)
 
 
 class Storage:
@@ -68,3 +127,152 @@ class Storage:
             )
             rows = await cur.fetchall()
             return [r[0] for r in rows]
+
+    # ------------------------------------------------------------------
+    # Transactions (v2)
+    # ------------------------------------------------------------------
+
+    async def log_transaction(
+        self,
+        *,
+        telegram_user_id: int,
+        card_id: str,
+        bonus_idx: int | None,
+        bonus_label: str | None,
+        merchant: str,
+        amount_sgd: float,
+        is_fcy: bool,
+        miles_earned: int,
+        txn_date: date,
+    ) -> str:
+        """Insert a new transaction; returns the generated tx_id."""
+        await self.upsert_user(telegram_user_id)
+        tx_id = uuid.uuid4().hex
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("PRAGMA foreign_keys = ON")
+            await db.execute(
+                """
+                INSERT INTO transactions
+                  (tx_id, telegram_user_id, card_id, bonus_idx, bonus_label,
+                   merchant, amount_sgd, is_fcy, miles_earned, txn_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tx_id,
+                    telegram_user_id,
+                    card_id,
+                    bonus_idx,
+                    bonus_label,
+                    merchant,
+                    float(amount_sgd),
+                    1 if is_fcy else 0,
+                    int(miles_earned),
+                    txn_date.isoformat(),
+                ),
+            )
+            await db.commit()
+        return tx_id
+
+    async def delete_transaction(self, telegram_user_id: int, tx_id: str) -> bool:
+        """Returns True if a row was deleted; False if no such row for this user."""
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "DELETE FROM transactions WHERE tx_id = ? AND telegram_user_id = ?",
+                (tx_id, telegram_user_id),
+            )
+            await db.commit()
+            return cur.rowcount > 0
+
+    async def list_transactions_since(
+        self, telegram_user_id: int, since: date
+    ) -> list[TxnRow]:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                f"SELECT {_TXN_COLS} FROM transactions "
+                "WHERE telegram_user_id = ? AND txn_date >= ? "
+                "ORDER BY txn_date, created_at",
+                (telegram_user_id, since.isoformat()),
+            )
+            rows = await cur.fetchall()
+        return [_row_to_txn(r) for r in rows]
+
+    async def recent_transactions(
+        self, telegram_user_id: int, limit: int = 10
+    ) -> list[TxnRow]:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                f"SELECT {_TXN_COLS} FROM transactions "
+                "WHERE telegram_user_id = ? "
+                "ORDER BY txn_date DESC, created_at DESC "
+                "LIMIT ?",
+                (telegram_user_id, int(limit)),
+            )
+            rows = await cur.fetchall()
+        return [_row_to_txn(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Statement days (v2)
+    # ------------------------------------------------------------------
+
+    async def set_statement_day(
+        self, telegram_user_id: int, card_id: str, statement_day: int
+    ) -> None:
+        if not (1 <= int(statement_day) <= 28):
+            raise ValueError("statement_day must be between 1 and 28")
+        await self.upsert_user(telegram_user_id)
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT INTO card_statement_days (telegram_user_id, card_id, statement_day)
+                VALUES (?, ?, ?)
+                ON CONFLICT(telegram_user_id, card_id) DO UPDATE SET
+                  statement_day = excluded.statement_day,
+                  updated_at = datetime('now')
+                """,
+                (telegram_user_id, card_id, int(statement_day)),
+            )
+            await db.commit()
+
+    async def get_statement_days(self, telegram_user_id: int) -> dict[str, int]:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "SELECT card_id, statement_day FROM card_statement_days "
+                "WHERE telegram_user_id = ?",
+                (telegram_user_id,),
+            )
+            rows = await cur.fetchall()
+        return {cid: int(d) for cid, d in rows}
+
+    # ------------------------------------------------------------------
+    # Lady's Card chosen category (v2)
+    # ------------------------------------------------------------------
+
+    async def set_lady_choice(
+        self, telegram_user_id: int, category: str, effective_from: date
+    ) -> None:
+        await self.upsert_user(telegram_user_id)
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT INTO lady_choices (telegram_user_id, category, effective_from)
+                VALUES (?, ?, ?)
+                ON CONFLICT(telegram_user_id, effective_from) DO UPDATE SET
+                  category = excluded.category
+                """,
+                (telegram_user_id, category, effective_from.isoformat()),
+            )
+            await db.commit()
+
+    async def get_lady_choice(
+        self, telegram_user_id: int, today: date
+    ) -> str | None:
+        """Returns the most recent category whose effective_from is on or before `today`."""
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "SELECT category FROM lady_choices "
+                "WHERE telegram_user_id = ? AND effective_from <= ? "
+                "ORDER BY effective_from DESC LIMIT 1",
+                (telegram_user_id, today.isoformat()),
+            )
+            row = await cur.fetchone()
+        return row[0] if row else None

@@ -171,12 +171,13 @@ Skip if the strict format works for users.
 
 This is when the bot becomes genuinely sticky.
 
-- [ ] `log <card> <merchant> <amount>` command
-- [ ] SQLite tables for transactions and pool state per user
-- [ ] Recommendation factors in remaining cap, min spend progress, pool balance
-- [ ] Bonus output: `⚠️ You're S$80 from UOB VS min spend, 6 days left in statement month`
-- [ ] `/pools` command — show all card pool states at a glance
-- [ ] Reset/correct flows for transactions logged wrong
+- [x] `/log <card> <merchant> <amount> [fcy] [yyyy-mm-dd]` command + inline 📝 buttons after recommendations
+- [x] SQLite tables for transactions, statement closing days, and Lady's chosen category per user
+- [x] Recommendation factors in remaining cap (blends bonus/base on overflow), min spend progress
+- [x] Bonus output: `⚠ S$80 from UOB VS min spend, 6 days left in statement month`
+- [x] `/pools` command — show all card cap states at a glance, grouped by redemption pool
+- [x] `/recent` + per-txn 🗑 button + per-confirmation ↩ Undo for correction flows
+- [x] `/lady_choice` for UOB Lady's chosen-category UX
 
 **Ship gate:** Recommendations change correctly as caps fill up. Tested across calendar/statement boundaries.
 

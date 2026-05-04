@@ -85,3 +85,42 @@
   wallet: [maybank_xl, hsbc_revo]
   expected_top: hsbc_revo
   # Both have dining bonus. Maybank floor_sgd_5(12)=10 → 40 mi. HSBC floor_sgd_1(12)=12 → 48 mi.
+
+# ----------------------------------------------------------------------------
+# v2 scenarios — exercise cap-aware ranking via seed_txns. The test runner
+# pre-seeds transactions, materializes usage, and asserts top card.
+# ----------------------------------------------------------------------------
+
+- id: ppv_mobile_cap_exhausted_downranks
+  text: "grab food 50"
+  wallet: [hsbc_revo, uob_ppv]
+  today: "2026-05-04"
+  seed_txns:
+    - { card: uob_ppv, bonus_idx: 1, merchant: shopee, amount: 600 }
+  expected_top: hsbc_revo
+  # UOB PPV bonus 1 (online retail) S$600 cap reached → base rate. HSBC Revo grab/online → 200 mi.
+
+- id: ppv_partial_cap_still_wins
+  text: "grab food 50"
+  wallet: [hsbc_revo, uob_ppv]
+  today: "2026-05-04"
+  seed_txns:
+    - { card: uob_ppv, bonus_idx: 1, merchant: shopee, amount: 200 }
+  expected_top: hsbc_revo
+  # UOB PPV still has S$400 cap left; bonus full applies → 200 mi. HSBC Revo also 200. Alpha break: HSBC < UOB.
+
+- id: maybank_min_spend_unmet_loses_to_hsbc
+  text: "kopitiam 80"
+  wallet: [maybank_xl, hsbc_revo]
+  today: "2026-05-04"
+  expected_top: hsbc_revo
+  # Maybank XL has S$500 min spend; with no seed_txns, gap = 500 - 80 = 420. Maybank falls to base 0.4 → 32 mi. HSBC dining 4mpd → 320 mi.
+
+- id: maybank_min_spend_met_wins_on_excluded_merchant
+  text: "klook 100"
+  wallet: [maybank_xl, hsbc_revo]
+  today: "2026-05-04"
+  seed_txns:
+    - { card: maybank_xl, bonus_idx: 0, merchant: shopee, amount: 600 }
+  expected_top: maybank_xl
+  # Min spend met (600 prior + 100 this = 700 > 500). Maybank fires 4mpd: 100*4=400. HSBC veto'd by travel_excluded → base 40 mi.

@@ -1,6 +1,9 @@
-# CardKaki v1 — 11 cards. Each entry cites the Milelion review consulted.
+# CardKaki — 11 cards. Each entry cites the Milelion review consulted.
 # Treat values as best-effort starter data; verify against current T&Cs.
-# Caps and min_spend_sgd are informational in v1 (not enforced) — that's v2.
+#
+# v2 enforces caps and min_spend_sgd via per-user txn history. statement_month
+# bonuses (UOB VS, Citi Rewards) prompt the user for their statement closing
+# day on card-add; calendar_month is the fallback when unset.
 
 - id: hsbc_revo
   name: HSBC Revolution
@@ -89,7 +92,7 @@
   pool: uob_unis
   tracks_by: posting_date
   fcy_fee: 0.0325
-  notes: "Two independent bonus categories post-Sep 2025; min spend tracked separately per category. SPC officially excluded; Shell on paper excluded but works in practice. Source: milelion.com/2025/08/29/review-uob-visa-signature-card"
+  notes: "Two independent bonus categories post-Sep 2025; min spend tracked separately per category. SPC officially excluded; Shell on paper excluded but works in practice. v2: prompts for statement closing day on add. Source: milelion.com/2025/08/29/review-uob-visa-signature-card"
 
 - id: uob_prvi
   name: UOB PRVI Miles
@@ -138,7 +141,7 @@
   pool: uob_unis
   tracks_by: posting_date
   fcy_fee: 0.0325
-  notes: "v1 doesn't store user's chosen category — bonus only fires when caller passes 'lady_chosen' explicitly. Per-user choice is v2. No Milelion URL provided; encoded against general SG knowledge."
+  notes: "v2: per-user chosen category via /lady_choice. Bonus fires when bot injects 'lady_chosen' based on user's stored pick + merchant matches. No Milelion URL provided; encoded against general SG knowledge."
 
 - id: citi_rewards
   name: Citi Rewards
@@ -161,7 +164,7 @@
   pool: citi_thankyou
   tracks_by: transaction_date
   fcy_fee: 0.0325
-  notes: "Statement month cap; bonus DOES apply to FCY in qualifying categories. Source: milelion.com/2026/02/27/review-citi-rewards-credit-card"
+  notes: "Statement month cap; bonus DOES apply to FCY in qualifying categories. v2: prompts for statement closing day on add. Source: milelion.com/2026/02/27/review-citi-rewards-credit-card"
 
 - id: citi_pm
   name: Citi PremierMiles

@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 from cardkaki.storage import Storage
@@ -8,6 +10,11 @@ async def storage(tmp_path):
     s = Storage(tmp_path / "users.sqlite")
     await s.init()
     return s
+
+
+# ---------------------------------------------------------------------------
+# v1 wallet store
+# ---------------------------------------------------------------------------
 
 
 async def test_init_creates_db(storage, tmp_path):
@@ -41,3 +48,154 @@ async def test_cross_user_isolation(storage):
 
 async def test_list_cards_empty_user(storage):
     assert await storage.list_cards(999) == []
+
+
+# ---------------------------------------------------------------------------
+# v2: transactions
+# ---------------------------------------------------------------------------
+
+
+async def test_log_transaction_returns_tx_id(storage):
+    tx_id = await storage.log_transaction(
+        telegram_user_id=1,
+        card_id="uob_ppv",
+        bonus_idx=0,
+        bonus_label="mobile contactless",
+        merchant="grab_food",
+        amount_sgd=45.0,
+        is_fcy=False,
+        miles_earned=180,
+        txn_date=date(2026, 5, 4),
+    )
+    assert isinstance(tx_id, str) and len(tx_id) >= 16
+
+
+async def test_recent_transactions_returns_descending(storage):
+    await storage.log_transaction(
+        telegram_user_id=1, card_id="hsbc_revo", bonus_idx=0, bonus_label="x",
+        merchant="a", amount_sgd=10, is_fcy=False, miles_earned=40,
+        txn_date=date(2026, 5, 1),
+    )
+    await storage.log_transaction(
+        telegram_user_id=1, card_id="hsbc_revo", bonus_idx=0, bonus_label="x",
+        merchant="b", amount_sgd=20, is_fcy=False, miles_earned=80,
+        txn_date=date(2026, 5, 3),
+    )
+    rows = await storage.recent_transactions(1, limit=10)
+    assert [r.merchant for r in rows] == ["b", "a"]
+
+
+async def test_list_transactions_since_filters_by_date(storage):
+    await storage.log_transaction(
+        telegram_user_id=1, card_id="hsbc_revo", bonus_idx=0, bonus_label="x",
+        merchant="april", amount_sgd=10, is_fcy=False, miles_earned=40,
+        txn_date=date(2026, 4, 28),
+    )
+    await storage.log_transaction(
+        telegram_user_id=1, card_id="hsbc_revo", bonus_idx=0, bonus_label="x",
+        merchant="may", amount_sgd=20, is_fcy=False, miles_earned=80,
+        txn_date=date(2026, 5, 1),
+    )
+    rows = await storage.list_transactions_since(1, since=date(2026, 5, 1))
+    assert [r.merchant for r in rows] == ["may"]
+
+
+async def test_delete_transaction_other_user_cannot_delete(storage):
+    tx_id = await storage.log_transaction(
+        telegram_user_id=1, card_id="hsbc_revo", bonus_idx=None, bonus_label=None,
+        merchant="a", amount_sgd=10, is_fcy=False, miles_earned=4,
+        txn_date=date(2026, 5, 1),
+    )
+    assert await storage.delete_transaction(2, tx_id) is False
+    rows = await storage.list_transactions_since(1, since=date(2026, 1, 1))
+    assert len(rows) == 1
+    assert await storage.delete_transaction(1, tx_id) is True
+    rows = await storage.list_transactions_since(1, since=date(2026, 1, 1))
+    assert rows == []
+
+
+async def test_transactions_cascade_on_user_delete(storage, tmp_path):
+    import aiosqlite
+
+    await storage.log_transaction(
+        telegram_user_id=1, card_id="hsbc_revo", bonus_idx=None, bonus_label=None,
+        merchant="a", amount_sgd=10, is_fcy=False, miles_earned=4,
+        txn_date=date(2026, 5, 1),
+    )
+    async with aiosqlite.connect(tmp_path / "users.sqlite") as db:
+        await db.execute("PRAGMA foreign_keys = ON")
+        await db.execute("DELETE FROM users WHERE telegram_user_id = 1")
+        await db.commit()
+    rows = await storage.list_transactions_since(1, since=date(2026, 1, 1))
+    assert rows == []
+
+
+async def test_log_transaction_preserves_bonus_idx_none(storage):
+    tx_id = await storage.log_transaction(
+        telegram_user_id=1, card_id="dbs_altitude", bonus_idx=None, bonus_label=None,
+        merchant="a", amount_sgd=50, is_fcy=False, miles_earned=65,
+        txn_date=date(2026, 5, 1),
+    )
+    rows = await storage.recent_transactions(1)
+    assert rows[0].tx_id == tx_id
+    assert rows[0].bonus_idx is None
+    assert rows[0].bonus_label is None
+
+
+# ---------------------------------------------------------------------------
+# v2: statement days
+# ---------------------------------------------------------------------------
+
+
+async def test_set_statement_day_round_trip(storage):
+    await storage.set_statement_day(1, "uob_vs", 22)
+    days = await storage.get_statement_days(1)
+    assert days == {"uob_vs": 22}
+
+
+async def test_set_statement_day_overwrites(storage):
+    await storage.set_statement_day(1, "uob_vs", 22)
+    await storage.set_statement_day(1, "uob_vs", 25)
+    days = await storage.get_statement_days(1)
+    assert days == {"uob_vs": 25}
+
+
+async def test_set_statement_day_rejects_out_of_range(storage):
+    with pytest.raises(ValueError):
+        await storage.set_statement_day(1, "uob_vs", 0)
+    with pytest.raises(ValueError):
+        await storage.set_statement_day(1, "uob_vs", 29)
+
+
+async def test_get_statement_days_returns_all_for_user(storage):
+    await storage.set_statement_day(1, "uob_vs", 22)
+    await storage.set_statement_day(1, "citi_rewards", 5)
+    await storage.set_statement_day(2, "uob_vs", 10)
+    days = await storage.get_statement_days(1)
+    assert days == {"uob_vs": 22, "citi_rewards": 5}
+
+
+# ---------------------------------------------------------------------------
+# v2: lady's chosen category
+# ---------------------------------------------------------------------------
+
+
+async def test_lady_choice_round_trip(storage):
+    await storage.set_lady_choice(1, "dining_local", date(2026, 4, 1))
+    cat = await storage.get_lady_choice(1, today=date(2026, 5, 4))
+    assert cat == "dining_local"
+
+
+async def test_get_lady_choice_returns_most_recent_at_or_before_today(storage):
+    await storage.set_lady_choice(1, "dining_local", date(2026, 1, 1))
+    await storage.set_lady_choice(1, "online_shopping", date(2026, 4, 1))
+    # Before second pick
+    assert await storage.get_lady_choice(1, today=date(2026, 3, 30)) == "dining_local"
+    # On second pick
+    assert await storage.get_lady_choice(1, today=date(2026, 4, 1)) == "online_shopping"
+    # After second pick
+    assert await storage.get_lady_choice(1, today=date(2026, 5, 1)) == "online_shopping"
+
+
+async def test_get_lady_choice_none_when_unset(storage):
+    assert await storage.get_lady_choice(1, today=date(2026, 5, 1)) is None
