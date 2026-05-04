@@ -7,6 +7,7 @@ factory at the bottom wires those helpers to commands/messages.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
@@ -251,6 +252,45 @@ def format_log_buttons(
         name = r.card_name if len(r.card_name) <= 18 else r.card_name[:17] + "…"
         rows.append(InlineKeyboardButton(f"📝 {name}", callback_data=f"log:{token}"))
     return InlineKeyboardMarkup([rows])
+
+
+def format_card_picker_buttons(cards: list[Card], token: str) -> InlineKeyboardMarkup:
+    """One button per owned card for the /log card-picker flow."""
+    rows = []
+    for card in cards:
+        name = card.name if len(card.name) <= 22 else card.name[:21] + "…"
+        rows.append([InlineKeyboardButton(name, callback_data=f"lcard:{token}:{card.id}")])
+    return InlineKeyboardMarkup(rows)
+
+
+_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _parse_friendly_date(text: str, today: date) -> date | None:
+    """Parse '3 May', '30/4', 'dd-mm', or 'yyyy-mm-dd'. Returns None on failure."""
+    text = text.strip()
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        pass
+    m = re.match(r"^(\d{1,2})[/\-](\d{1,2})$", text)
+    if m:
+        try:
+            return date(today.year, int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            pass
+    m = re.match(r"^(\d{1,2})\s+([a-zA-Z]+)$", text)
+    if m:
+        month = _MONTHS.get(m.group(2).lower()[:3])
+        if month:
+            try:
+                return date(today.year, month, int(m.group(1)))
+            except ValueError:
+                pass
+    return None
 
 
 def format_log_confirmation(
@@ -943,12 +983,37 @@ async def _text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     storage: Storage = context.application.bot_data["storage"]
     catalog: dict[str, Card] = context.application.bot_data["cards"]
     merchants: dict[str, MerchantEntry] = context.application.bot_data["merchants"]
-    pending_logs: dict[str, dict] = context.application.bot_data.setdefault(
-        "pending_logs", {}
-    )
+    user_id = update.effective_user.id
 
+    pending_date_input: dict[int, str] = context.application.bot_data.setdefault("pending_date_input", {})
+    token = pending_date_input.get(user_id)
+    if token:
+        pending_logs: dict[str, dict] = context.application.bot_data.setdefault("pending_logs", {})
+        info = pending_logs.get(token)
+        if info is not None:
+            today = date.today()
+            txn_date = _parse_friendly_date(update.message.text.strip(), today)
+            if txn_date is None:
+                await update.message.reply_text(
+                    f"Couldn't parse `{_md(update.message.text.strip())}` — try `3 May`, `30/4`, or `2026-04-30`.",
+                    parse_mode="Markdown",
+                )
+                return
+            args = [info["card_id"], info["merchant"], str(info["amount_sgd"])]
+            if info["is_fcy"]:
+                args.append("fcy")
+            args.append(txn_date.isoformat())
+            text, kb = await handle_log_command(args, user_id, storage, catalog, merchants)
+            pending_date_input.pop(user_id, None)
+            pending_logs.pop(token, None)
+            await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+            return
+        else:
+            pending_date_input.pop(user_id, None)
+
+    pending_logs = context.application.bot_data.setdefault("pending_logs", {})
     payload = await compute_recommendation_payload(
-        update.message.text, update.effective_user.id, storage, catalog, merchants
+        update.message.text, user_id, storage, catalog, merchants
     )
     kb = format_log_buttons(
         payload.recs,
@@ -966,11 +1031,59 @@ async def _log(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     storage: Storage = context.application.bot_data["storage"]
     catalog: dict[str, Card] = context.application.bot_data["cards"]
     merchants: dict[str, MerchantEntry] = context.application.bot_data["merchants"]
+    user_id = update.effective_user.id
     args = (update.message.text or "").split()[1:]
-    text, kb = await handle_log_command(
-        args, update.effective_user.id, storage, catalog, merchants
+
+    # Power-user path: card_id provided as first arg — log directly.
+    if args and args[0].lower() in catalog:
+        text, kb = await handle_log_command(args, user_id, storage, catalog, merchants)
+        await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+        return
+
+    # Interactive path: show card picker.
+    if len(args) < 2:
+        await update.message.reply_text(
+            "Usage: `/log <merchant> <amount> [fcy]`\ne.g. `/log shopee 45`\n\n"
+            "Or skip the picker: `/log uob_ppv shopee 45`",
+            parse_mode="Markdown",
+        )
+        return
+
+    merchant_raw = args[0]
+    merchant = merchant_raw.lower().replace(" ", "_")
+    try:
+        amount = float(args[1])
+    except ValueError:
+        await update.message.reply_text(
+            f"Invalid amount: `{_md(args[1])}`. Use a number like `45` or `9.99`.",
+            parse_mode="Markdown",
+        )
+        return
+    if amount <= 0:
+        await update.message.reply_text("Amount must be greater than 0.", parse_mode="Markdown")
+        return
+
+    is_fcy = any(a.lower() == "fcy" for a in args[2:])
+
+    owned = await storage.list_cards(user_id)
+    owned_cards = [catalog[c] for c in owned if c in catalog]
+    if not owned_cards:
+        await update.message.reply_text(
+            "Your wallet is empty — add cards first via /cards.", parse_mode="Markdown"
+        )
+        return
+
+    pending_logs: dict[str, dict] = context.application.bot_data.setdefault("pending_logs", {})
+    token = uuid.uuid4().hex[:10]
+    pending_logs[token] = {"merchant": merchant, "amount_sgd": amount, "is_fcy": is_fcy}
+
+    fcy_note = " FCY" if is_fcy else ""
+    kb = format_card_picker_buttons(owned_cards, token)
+    await update.message.reply_text(
+        f"Which card for `{_md(merchant_raw)} S${amount:g}{fcy_note}`?",
+        reply_markup=kb,
+        parse_mode="Markdown",
     )
-    await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
 
 async def _pools(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1026,6 +1139,83 @@ async def _log_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
     if query.message:
         await query.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+
+
+async def _log_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """User picked a card from the /log card picker — show date picker."""
+    query = update.callback_query
+    if not query or not update.effective_user or not query.data:
+        return
+    await query.answer()
+
+    rest = query.data[len("lcard:"):]
+    token, card_id = rest.split(":", 1)
+
+    pending_logs: dict[str, dict] = context.application.bot_data.setdefault("pending_logs", {})
+    info = pending_logs.get(token)
+    if info is None:
+        await query.edit_message_text("This log request expired — try /log again.")
+        return
+
+    info["card_id"] = card_id
+    catalog: dict[str, Card] = context.application.bot_data["cards"]
+    card = catalog.get(card_id)
+    card_name = card.name if card else card_id
+
+    today = date.today()
+    today_label = today.strftime("%-d %b")
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton(f"📅 Today ({today_label})", callback_data=f"ldate:{token}:today"),
+        InlineKeyboardButton("✏️ Different date", callback_data=f"ldate:{token}:custom"),
+    ]])
+    merchant_display = info["merchant"].replace("_", " ")
+    fcy_note = " FCY" if info["is_fcy"] else ""
+    await query.edit_message_text(
+        f"*{_md(card_name)}* — `{_md(merchant_display)} S${info['amount_sgd']:g}{fcy_note}`\n"
+        "When was this transaction?",
+        reply_markup=kb,
+        parse_mode="Markdown",
+    )
+
+
+async def _log_date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """User picked today or custom date from the /log date picker."""
+    query = update.callback_query
+    if not query or not update.effective_user or not query.data:
+        return
+    await query.answer()
+
+    rest = query.data[len("ldate:"):]
+    token, choice = rest.rsplit(":", 1)
+
+    pending_logs: dict[str, dict] = context.application.bot_data.setdefault("pending_logs", {})
+    info = pending_logs.get(token)
+    if info is None:
+        if query.message:
+            await query.message.reply_text("This log request expired — try /log again.")
+        return
+
+    storage: Storage = context.application.bot_data["storage"]
+    catalog: dict[str, Card] = context.application.bot_data["cards"]
+    merchants: dict[str, MerchantEntry] = context.application.bot_data["merchants"]
+    user_id = update.effective_user.id
+
+    if choice == "today":
+        args = [info["card_id"], info["merchant"], str(info["amount_sgd"])]
+        if info["is_fcy"]:
+            args.append("fcy")
+        text, kb = await handle_log_command(args, user_id, storage, catalog, merchants)
+        pending_logs.pop(token, None)
+        if query.message:
+            await query.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+    else:
+        pending_date_input: dict[int, str] = context.application.bot_data.setdefault("pending_date_input", {})
+        pending_date_input[user_id] = token
+        if query.message:
+            await query.message.reply_text(
+                "Enter the transaction date (e.g. `3 May`, `30/4`, or `2026-04-30`):",
+                parse_mode="Markdown",
+            )
 
 
 async def _undo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1186,6 +1376,7 @@ def build_application(
     app.bot_data["cards"] = cards
     app.bot_data["merchants"] = merchants
     app.bot_data["pending_logs"] = {}
+    app.bot_data["pending_date_input"] = {}
     app.add_handler(CommandHandler("start", _start))
     app.add_handler(CommandHandler("help", _start))
     app.add_handler(CommandHandler("cards", _cards))
@@ -1195,6 +1386,8 @@ def build_application(
     app.add_handler(CommandHandler("lady_choice", _lady_choice))
     app.add_handler(CallbackQueryHandler(_cards_callback, pattern=r"^ck:"))
     app.add_handler(CallbackQueryHandler(_log_callback, pattern=r"^log:"))
+    app.add_handler(CallbackQueryHandler(_log_card_callback, pattern=r"^lcard:"))
+    app.add_handler(CallbackQueryHandler(_log_date_callback, pattern=r"^ldate:"))
     app.add_handler(CallbackQueryHandler(_undo_callback, pattern=r"^undo:"))
     app.add_handler(CallbackQueryHandler(_del_callback, pattern=r"^del:"))
     app.add_handler(CallbackQueryHandler(_pools_callback, pattern=r"^pools$"))
