@@ -101,6 +101,45 @@ def test_period_label_statement_month_without_day():
     assert "not set" in label.lower()
 
 
+# ---------------------------------------------------------------------------
+# v3: anniversary_year period
+# ---------------------------------------------------------------------------
+
+
+def test_anniversary_year_bounds_mid_year():
+    # anniversary_month=3 (March), today=Aug 2026 → window is [Mar 2026, Mar 2027)
+    assert period_bounds("anniversary_year", date(2026, 8, 15), anniversary_month=3) == (
+        date(2026, 3, 1),
+        date(2027, 3, 1),
+    )
+
+
+def test_anniversary_year_bounds_before_anniversary_month():
+    # anniversary_month=6 (June), today=Feb 2026 → window is [Jun 2025, Jun 2026)
+    assert period_bounds("anniversary_year", date(2026, 2, 1), anniversary_month=6) == (
+        date(2025, 6, 1),
+        date(2026, 6, 1),
+    )
+
+
+def test_anniversary_year_bounds_on_anniversary_month():
+    # anniversary_month=5 (May), today=May 4 2026 → window is [May 2026, May 2027)
+    assert period_bounds("anniversary_year", date(2026, 5, 4), anniversary_month=5) == (
+        date(2026, 5, 1),
+        date(2027, 5, 1),
+    )
+
+
+def test_anniversary_year_days_left_at_period_end():
+    # anniversary_month=5, today = Apr 30 → end = May 1 → 1 day left
+    assert days_left("anniversary_year", date(2026, 4, 30), anniversary_month=5) == 1
+
+
+def test_anniversary_year_days_left_at_period_start():
+    # anniversary_month=5, today = May 1 → end = May 1 next year → 365 days left
+    assert days_left("anniversary_year", date(2026, 5, 1), anniversary_month=5) == 365
+
+
 def test_safe_date_handles_feb_clamp():
     # statement_day=28, today=Jan 5 → cycle goes back to Dec 29..Jan 29
     # When stepping forward past Feb, day 29 might overshoot. Spot-check Feb edge.

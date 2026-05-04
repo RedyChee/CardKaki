@@ -27,6 +27,8 @@
       cap_period: calendar_month
   pool: hsbc_rewards
   tracks_by: posting_date
+  posting_delay_days: 1
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "Marketed 4 mpd; effective 3.33 mpd via 30k:10k HSBC pts:KF conversion. v1 uses marketed. Source: milelion.com/2026/04/08/review-hsbc-revolution-card"
 
@@ -55,6 +57,8 @@
       cap_period: calendar_month
   pool: uob_unis
   tracks_by: posting_date
+  posting_delay_days: 2
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "Two sub-caps post-Oct 2025: S$600 mobile + S$600 online, tracked separately. Source: milelion.com/2026/03/29/review-uob-preferred-platinum-visa-card"
 
@@ -91,6 +95,8 @@
       min_spend_period: statement_month
   pool: uob_unis
   tracks_by: posting_date
+  posting_delay_days: 2
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "Two independent bonus categories post-Sep 2025; min spend tracked separately per category. SPC officially excluded; Shell on paper excluded but works in practice. v2: prompts for statement closing day on add. Source: milelion.com/2025/08/29/review-uob-visa-signature-card"
 
@@ -120,6 +126,8 @@
       applies_to_fcy: true
   pool: uob_unis
   tracks_by: posting_date
+  posting_delay_days: 2
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "No cap. SE-Asian currency boost (3.0 FCY for IDR/MYR/THB/VND) not modeled in v1. Min S$5/txn. Source: milelion.com/2026/02/04/review-uob-prvi-miles-card"
 
@@ -140,6 +148,8 @@
       cap_period: calendar_month
   pool: uob_unis
   tracks_by: posting_date
+  posting_delay_days: 2
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "v2: per-user chosen category via /lady_choice. Bonus fires when bot injects 'lady_chosen' based on user's stored pick + merchant matches. No Milelion URL provided; encoded against general SG knowledge."
 
@@ -162,7 +172,9 @@
       cap_sgd: 1000
       cap_period: statement_month
   pool: citi_thankyou
-  tracks_by: transaction_date
+  tracks_by: posting_date
+  posting_delay_days: 1
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "Statement month cap; bonus DOES apply to FCY in qualifying categories. v2: prompts for statement closing day on add. Source: milelion.com/2026/02/27/review-citi-rewards-credit-card"
 
@@ -193,7 +205,9 @@
       applies_to_sgd: false
       applies_to_fcy: true
   pool: citi_miles
-  tracks_by: transaction_date
+  tracks_by: posting_date
+  posting_delay_days: 1
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "Bonus rates valid by 31 Dec 2025 (stays till mid-2026). Source: milelion.com/2025/06/29/review-citi-premiermiles-card"
 
@@ -206,7 +220,9 @@
   rounding: { method: none }
   bonus: []
   pool: dbs_points
-  tracks_by: posting_date
+  tracks_by: transaction_date
+  posting_delay_days: 1
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "No bonus categories anymore — 3mpd hotels/air discontinued Aug 2023; Expedia/Kaligo discontinued Apr 2024. Base-only card. Source: milelion.com/2025/06/25/review-dbs-altitude-card"
 
@@ -230,7 +246,9 @@
       cap_sgd: 1000
       cap_period: calendar_month
   pool: dbs_points
-  tracks_by: posting_date
+  tracks_by: transaction_date
+  posting_delay_days: 1
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "FCY-online qualifies for 4mpd. Source: milelion.com/2025/08/09/review-dbs-womans-world-card"
 
@@ -261,6 +279,8 @@
       cap_period: calendar_month
   pool: direct_kf
   tracks_by: posting_date
+  posting_delay_days: 3
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "Direct KrisFlyer credit; no conversion fee. SimplyGo (4111) and SPC excluded. Source: milelion.com/2025/11/18/review-amex-krisflyer-credit-card"
 
@@ -287,6 +307,8 @@
       min_spend_sgd: 500
       min_spend_period: calendar_month
   pool: maybank_treats
-  tracks_by: posting_date
+  tracks_by: transaction_date
+  posting_delay_days: 1
+  anniversary_year: false
   fcy_fee: 0.0325
   notes: "FCY base 4mpd uncommon — earns on travel agencies (incl. klook). Min income S$30k; ages 21-39 only. Source: milelion.com/2025/08/18/review-maybank-xl-rewards-card"

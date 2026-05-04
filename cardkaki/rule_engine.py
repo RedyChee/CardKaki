@@ -14,7 +14,8 @@ from datetime import date
 from math import floor
 
 from .models import Bonus, BonusUsage, Card, Recommendation
-from .periods import days_left
+from .periods import days_left, period_bounds
+from .posting import posting_period_warning, resolve_posting_date
 
 
 def recommend(
@@ -25,6 +26,9 @@ def recommend(
     today: date | None = None,
     usage: dict[tuple[str, int], BonusUsage] | None = None,
     statement_days: dict[str, int] | None = None,
+    posting_delays: dict[str, int] | None = None,
+    same_day_merchant: bool = False,
+    anniversary_months: dict[str, int] | None = None,
 ) -> list[Recommendation]:
     if amount_sgd <= 0:
         raise ValueError("amount_sgd must be > 0")
@@ -43,6 +47,9 @@ def recommend(
                 today=today or date.today(),
                 usage=usage,
                 statement_days=statement_days or {},
+                posting_delays=posting_delays,
+                same_day_merchant=same_day_merchant,
+                anniversary_months=anniversary_months,
             )
         recs.append(rec)
 
@@ -244,6 +251,9 @@ def _evaluate_card_v2(
     today: date,
     usage: dict[tuple[str, int], BonusUsage],
     statement_days: dict[str, int],
+    posting_delays: dict[str, int] | None = None,
+    same_day_merchant: bool = False,
+    anniversary_months: dict[str, int] | None = None,
 ) -> Recommendation:
     reasons: list[str] = []
     fcy_fee = card.fcy_fee if is_fcy else 0.0
@@ -253,6 +263,19 @@ def _evaluate_card_v2(
         reasons.append(rounding_reason)
     base_rate = _base_rate(card, is_fcy)
     s_day = statement_days.get(card.id)
+
+    # v3: compute the effective date for period calculations.
+    # posting_date cards evaluate caps against when the bank will actually count
+    # the spend; transaction_date cards (DBS, Maybank) use today as before.
+    if posting_delays is not None and card.tracks_by == "posting_date":
+        delay = posting_delays.get(card.id, card.posting_delay_days)
+        posting_date = resolve_posting_date(today, delay, same_day_merchant)
+        period_date = posting_date
+    else:
+        posting_date = today
+        period_date = today
+
+    ann_month = (anniversary_months or {}).get(card.id)
 
     candidates: list[tuple[int, Bonus, list[str]]] = []  # (miles, bonus, extras)
     skipped_reasons: list[str] = []
@@ -275,7 +298,7 @@ def _evaluate_card_v2(
             if projected < bonus.min_spend_sgd:
                 gap = bonus.min_spend_sgd - u.min_spend_sgd
                 ms_period = bonus.min_spend_period or "calendar_month"
-                n = days_left(ms_period, today, s_day)
+                n = days_left(ms_period, period_date, s_day, ann_month)
                 period_word = ms_period.replace("_", " ")
                 day_word = "day" if n == 1 else "days"
                 skipped_reasons.append(
@@ -337,10 +360,30 @@ def _evaluate_card_v2(
         reasons.append(f"FCY +{card.fcy_fee * 100:.2f}% fee")
 
     effective_mpd = round((miles / cost) if cost > 0 else 0.0, 2)
+
+    # v3: generate posting_warning when the spend crosses into a new period.
+    rec_posting_warning: str | None = None
+    if (
+        posting_delays is not None
+        and card.tracks_by == "posting_date"
+        and posting_date != today
+        and best_bonus is not None
+        and best_miles >= base_miles
+    ):
+        cap_period = best_bonus.cap_period or "calendar_month"
+        rec_posting_warning = posting_period_warning(
+            txn_date=today,
+            posting_date=posting_date,
+            period=cap_period,
+            statement_day=s_day,
+            anniversary_month=ann_month,
+        )
+
     return Recommendation(
         card_id=card.id,
         card_name=card.name,
         miles=miles,
         effective_mpd=effective_mpd,
         reasons=reasons,
+        posting_warning=rec_posting_warning,
     )

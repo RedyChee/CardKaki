@@ -54,7 +54,8 @@ def _build_seed_txns(seed: list[dict]) -> list[TxnRow]:
 def test_scenario(scenario, catalog, merchants):
     parsed = parse(scenario["text"])
     wallet = [catalog[cid] for cid in scenario["wallet"]]
-    categories = merchants.get(parsed.merchant, [])
+    entry = merchants.get(parsed.merchant)
+    categories = entry.categories if entry is not None else []
     today = date.fromisoformat(scenario["today"]) if "today" in scenario else date.today()
 
     seed_txns = _build_seed_txns(scenario.get("seed_txns", []))

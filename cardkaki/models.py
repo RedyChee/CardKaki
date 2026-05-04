@@ -20,11 +20,13 @@ class Bonus(BaseModel):
     applies_to_fcy: bool = False
     cap_sgd: float | None = None
     cap_period: Literal[
-        "calendar_month", "statement_month", "calendar_quarter", "statement_quarter"
+        "calendar_month", "statement_month", "calendar_quarter", "statement_quarter",
+        "anniversary_year",
     ] | None = None
     min_spend_sgd: float | None = None
     min_spend_period: Literal[
-        "calendar_month", "statement_month", "calendar_quarter", "statement_quarter"
+        "calendar_month", "statement_month", "calendar_quarter", "statement_quarter",
+        "anniversary_year",
     ] | None = None
     label: str | None = None
 
@@ -42,6 +44,8 @@ class Card(BaseModel):
     rounding: Rounding = Field(default_factory=Rounding)
     pool: str | None = None
     tracks_by: Literal["posting_date", "transaction_date"] = "posting_date"
+    posting_delay_days: int = 1
+    anniversary_year: bool = False
     fcy_fee: float = 0.0325
     notes: str | None = None
 
@@ -60,6 +64,7 @@ class Recommendation(BaseModel):
     miles: int
     effective_mpd: float
     reasons: list[str] = Field(default_factory=list)
+    posting_warning: str | None = None
 
 
 class TxnRow(BaseModel):

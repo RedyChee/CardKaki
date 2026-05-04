@@ -5,22 +5,34 @@
 
 # --- groceries ---
 cold_storage:    [groceries, contactless]
-ntuc:            [groceries, contactless]
-fairprice:       [groceries, contactless]
+ntuc:
+  categories: [groceries, contactless]
+  same_day_posting: true
+fairprice:
+  categories: [groceries, contactless]
+  same_day_posting: true
 sheng_siong:     [groceries, contactless]
 giant:           [groceries, contactless]
 
 # --- online retail ---
-shopee:          [online_shopping]
+shopee:
+  categories: [online_shopping]
+  same_day_posting: true
 lazada:          [online_shopping]
 amazon:          [online_shopping]
 amazon_sg:       [online_shopping]
 qoo10:           [online_shopping]
 
 # --- ride hail / food delivery ---
-grab:            [transport, online_shopping, grab]
-grab_ride:       [transport, online_shopping, grab]
-grab_food:       [dining_delivery, online_shopping, grab]
+grab:
+  categories: [transport, online_shopping, grab]
+  same_day_posting: true
+grab_ride:
+  categories: [transport, online_shopping, grab]
+  same_day_posting: true
+grab_food:
+  categories: [dining_delivery, online_shopping, grab]
+  same_day_posting: true
 foodpanda:       [dining_delivery, online_shopping]
 deliveroo:       [dining_delivery, online_shopping]
 

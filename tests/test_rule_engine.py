@@ -468,3 +468,126 @@ def test_lady_chosen_with_cap_partial(cards):
     )
     r = out[0]
     assert r.miles == 200 + 20
+
+
+# ---------------------------------------------------------------------------
+# v3: posting date intelligence
+# ---------------------------------------------------------------------------
+
+
+def test_v3_posting_warning_on_period_boundary(cards):
+    """HSBC Revo T+1, txn Apr 30 → posts May 1 — should carry posting_warning."""
+    revo = cards["hsbc_revo"]
+    usage = {("hsbc_revo", 0): BonusUsage(spend_sgd=0, min_spend_sgd=0)}
+    out = recommend(
+        [revo], ["groceries", "contactless"], 45.0,
+        today=date(2026, 4, 30),
+        usage=usage,
+        posting_delays={"hsbc_revo": 1},
+        same_day_merchant=False,
+    )
+    r = out[0]
+    assert r.posting_warning is not None
+    assert "May" in r.posting_warning
+    assert "Apr" in r.posting_warning
+
+
+def test_v3_no_posting_warning_within_period(cards):
+    """HSBC Revo T+1, txn Apr 28 → posts Apr 29 — same period, no warning."""
+    revo = cards["hsbc_revo"]
+    usage = {("hsbc_revo", 0): BonusUsage(spend_sgd=0, min_spend_sgd=0)}
+    out = recommend(
+        [revo], ["groceries", "contactless"], 45.0,
+        today=date(2026, 4, 28),
+        usage=usage,
+        posting_delays={"hsbc_revo": 1},
+        same_day_merchant=False,
+    )
+    r = out[0]
+    assert r.posting_warning is None
+
+
+def test_v3_same_day_merchant_no_warning_on_boundary(cards):
+    """Same-day merchant overrides delay; no warning even on Apr 30."""
+    revo = cards["hsbc_revo"]
+    usage = {("hsbc_revo", 0): BonusUsage(spend_sgd=0, min_spend_sgd=0)}
+    out = recommend(
+        [revo], ["groceries", "contactless"], 45.0,
+        today=date(2026, 4, 30),
+        usage=usage,
+        posting_delays={"hsbc_revo": 1},
+        same_day_merchant=True,
+    )
+    r = out[0]
+    assert r.posting_warning is None
+
+
+def test_v3_transaction_date_card_never_gets_warning(cards):
+    """DBS Altitude tracks by transaction_date — no posting warning regardless."""
+    altitude = cards["dbs_altitude"]
+    out = recommend(
+        [altitude], ["groceries"], 45.0,
+        today=date(2026, 4, 30),
+        usage={},
+        posting_delays={"dbs_altitude": 1},
+        same_day_merchant=False,
+    )
+    r = out[0]
+    assert r.posting_warning is None
+
+
+def test_v3_posting_none_when_no_delays_passed(cards):
+    """When posting_delays not passed (v2 callers), no posting_warning."""
+    revo = cards["hsbc_revo"]
+    usage = {("hsbc_revo", 0): BonusUsage(spend_sgd=0, min_spend_sgd=0)}
+    out = recommend(
+        [revo], ["groceries", "contactless"], 45.0,
+        today=date(2026, 4, 30),
+        usage=usage,
+    )
+    r = out[0]
+    assert r.posting_warning is None
+
+
+def test_v3_cap_period_evaluated_using_posting_date(cards):
+    """For a posting_date card near cap reset, the engine uses posting_date's
+    period — April cap may be full but posting lands in May (fresh cap)."""
+    from cardkaki.usage import build_usage
+    from cardkaki.models import TxnRow
+    from datetime import datetime
+
+    revo = cards["hsbc_revo"]
+    # Simulate April usage: 1000 SGD posted in April (txn_date all in April,
+    # and they post in April too since it's before Apr 30).
+    apr_txns = [
+        TxnRow(
+            tx_id=f"t{i}", telegram_user_id=1, card_id="hsbc_revo",
+            bonus_idx=0, bonus_label="online or contactless",
+            merchant="shopee", amount_sgd=100.0, is_fcy=False,
+            miles_earned=400, txn_date=date(2026, 4, i + 1),
+            created_at=datetime(2026, 4, i + 1),
+        )
+        for i in range(10)  # 10 * 100 = 1000 SGD in April
+    ]
+    # Build usage using posting_date = May 1 as the reference (transaction on
+    # Apr 30 posts May 1, so we want May's cap window).
+    usage = build_usage(
+        apr_txns, [revo],
+        today=date(2026, 5, 1),  # period_date = May 1 (posting date)
+        statement_days={},
+        posting_delays={"hsbc_revo": 1},
+    )
+    # April transactions post in April, not May → May usage should be 0
+    assert usage[("hsbc_revo", 0)].spend_sgd == 0.0
+
+    out = recommend(
+        [revo], ["groceries", "contactless"], 100.0,
+        today=date(2026, 4, 30),
+        usage=usage,
+        posting_delays={"hsbc_revo": 1},
+        same_day_merchant=False,
+    )
+    r = out[0]
+    # May cap is fresh → full bonus rate 4.0 mpd on 100 SGD (floor_sgd_1)
+    assert r.miles == 400
+    assert r.posting_warning is not None

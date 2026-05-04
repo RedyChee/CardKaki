@@ -15,6 +15,7 @@ PeriodLiteral = Literal[
     "statement_month",
     "calendar_quarter",
     "statement_quarter",
+    "anniversary_year",
 ]
 
 
@@ -69,14 +70,24 @@ def _statement_quarter_bounds(today: date, statement_day: int) -> tuple[date, da
     return start, end
 
 
+def _anniversary_year_bounds(today: date, anniversary_month: int) -> tuple[date, date]:
+    """12-month window [anniversary_month/year, anniversary_month/year+1)."""
+    year = today.year if today.month >= anniversary_month else today.year - 1
+    start = _safe_date(year, anniversary_month, 1)
+    end = _safe_date(year + 1, anniversary_month, 1)
+    return start, end
+
+
 def period_bounds(
     period: PeriodLiteral,
     today: date,
     statement_day: int | None = None,
+    anniversary_month: int | None = None,
 ) -> tuple[date, date]:
     """Return [start, end) — end exclusive — for the period containing `today`.
 
     statement_* falls back to calendar_* when statement_day is None.
+    anniversary_year requires anniversary_month.
     """
     if period == "calendar_month":
         return _calendar_month_bounds(today)
@@ -90,6 +101,10 @@ def period_bounds(
         if statement_day is None:
             return _calendar_quarter_bounds(today)
         return _statement_quarter_bounds(today, statement_day)
+    if period == "anniversary_year":
+        if anniversary_month is None:
+            raise ValueError("anniversary_month required for anniversary_year period")
+        return _anniversary_year_bounds(today, anniversary_month)
     raise ValueError(f"unknown period: {period!r}")
 
 
@@ -97,9 +112,10 @@ def days_left(
     period: PeriodLiteral,
     today: date,
     statement_day: int | None = None,
+    anniversary_month: int | None = None,
 ) -> int:
     """Days remaining in the current cycle, including today (1 = last day)."""
-    _, end = period_bounds(period, today, statement_day)
+    _, end = period_bounds(period, today, statement_day, anniversary_month)
     return max(0, (end - today).days)
 
 
@@ -114,12 +130,19 @@ def period_label(
     period: PeriodLiteral,
     today: date,
     statement_day: int | None = None,
+    anniversary_month: int | None = None,
 ) -> str:
     """Human-readable label for the current cycle."""
     if period == "calendar_month":
         return "calendar month"
     if period == "calendar_quarter":
         return "calendar quarter"
+    if period == "anniversary_year":
+        if anniversary_month is None:
+            return "anniversary year (month not set)"
+        start, end = period_bounds(period, today, anniversary_month=anniversary_month)
+        last = end - timedelta(days=1)
+        return f"anniversary year ({_fmt(start)} — {_fmt(last)})"
     if statement_day is None:
         kind = "month" if "month" in period else "quarter"
         return f"calendar {kind} (statement day not set)"

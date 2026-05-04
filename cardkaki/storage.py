@@ -54,6 +54,22 @@ CREATE TABLE IF NOT EXISTS lady_choices (
   PRIMARY KEY (telegram_user_id, effective_from),
   FOREIGN KEY (telegram_user_id) REFERENCES users(telegram_user_id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS card_posting_delays (
+  telegram_user_id INTEGER NOT NULL,
+  card_id TEXT NOT NULL,
+  delay_days INTEGER NOT NULL CHECK (delay_days BETWEEN 0 AND 7),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (telegram_user_id, card_id),
+  FOREIGN KEY (telegram_user_id) REFERENCES users(telegram_user_id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS card_anniversaries (
+  telegram_user_id INTEGER NOT NULL,
+  card_id TEXT NOT NULL,
+  anniversary_month INTEGER NOT NULL CHECK (anniversary_month BETWEEN 1 AND 12),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (telegram_user_id, card_id),
+  FOREIGN KEY (telegram_user_id) REFERENCES users(telegram_user_id) ON DELETE CASCADE
+);
 """
 
 
@@ -276,3 +292,69 @@ class Storage:
             )
             row = await cur.fetchone()
         return row[0] if row else None
+
+    # ------------------------------------------------------------------
+    # Posting delays (v3)
+    # ------------------------------------------------------------------
+
+    async def set_posting_delay(
+        self, telegram_user_id: int, card_id: str, delay_days: int
+    ) -> None:
+        if not (0 <= int(delay_days) <= 7):
+            raise ValueError("delay_days must be between 0 and 7")
+        await self.upsert_user(telegram_user_id)
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT INTO card_posting_delays (telegram_user_id, card_id, delay_days)
+                VALUES (?, ?, ?)
+                ON CONFLICT(telegram_user_id, card_id) DO UPDATE SET
+                  delay_days = excluded.delay_days,
+                  updated_at = datetime('now')
+                """,
+                (telegram_user_id, card_id, int(delay_days)),
+            )
+            await db.commit()
+
+    async def get_posting_delays(self, telegram_user_id: int) -> dict[str, int]:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "SELECT card_id, delay_days FROM card_posting_delays "
+                "WHERE telegram_user_id = ?",
+                (telegram_user_id,),
+            )
+            rows = await cur.fetchall()
+        return {cid: int(d) for cid, d in rows}
+
+    # ------------------------------------------------------------------
+    # Card anniversaries (v3)
+    # ------------------------------------------------------------------
+
+    async def set_anniversary(
+        self, telegram_user_id: int, card_id: str, anniversary_month: int
+    ) -> None:
+        if not (1 <= int(anniversary_month) <= 12):
+            raise ValueError("anniversary_month must be between 1 and 12")
+        await self.upsert_user(telegram_user_id)
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT INTO card_anniversaries (telegram_user_id, card_id, anniversary_month)
+                VALUES (?, ?, ?)
+                ON CONFLICT(telegram_user_id, card_id) DO UPDATE SET
+                  anniversary_month = excluded.anniversary_month,
+                  updated_at = datetime('now')
+                """,
+                (telegram_user_id, card_id, int(anniversary_month)),
+            )
+            await db.commit()
+
+    async def get_anniversaries(self, telegram_user_id: int) -> dict[str, int]:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "SELECT card_id, anniversary_month FROM card_anniversaries "
+                "WHERE telegram_user_id = ?",
+                (telegram_user_id,),
+            )
+            rows = await cur.fetchall()
+        return {cid: int(m) for cid, m in rows}

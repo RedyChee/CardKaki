@@ -5,6 +5,7 @@ import pytest
 
 from cardkaki.bot import (
     compute_recommendation_payload,
+    format_anniversary_prompt,
     format_card_list,
     format_catalog_keyboard,
     format_log_buttons,
@@ -535,3 +536,118 @@ async def test_recommendation_after_calendar_month_rollover(storage, catalog, me
     ppv_may = next(r for r in payload_may.recs if r.card_id == "uob_ppv")
     # bonus fires fully: 50 * 4 = 200
     assert ppv_may.miles == 200
+
+
+# ---------------------------------------------------------------------------
+# v3: posting_warning shown in format_recommendations
+# ---------------------------------------------------------------------------
+
+
+def test_format_recs_shows_posting_warning():
+    rec = Recommendation(
+        card_id="hsbc_revo", card_name="HSBC Revolution",
+        miles=180, effective_mpd=4.0, reasons=["✓ online or contactless"],
+        posting_warning="Posts Fri 1 May — counts toward May cap, not Apr",
+    )
+    out = format_recommendations(
+        [rec], merchant="cold_storage", amount_sgd=45, is_fcy=False
+    )
+    assert "Posts Fri 1 May" in out
+    assert "May cap" in out
+
+
+def test_format_recs_no_posting_warning_when_none():
+    rec = Recommendation(
+        card_id="hsbc_revo", card_name="HSBC Revolution",
+        miles=180, effective_mpd=4.0, reasons=["✓ online or contactless"],
+        posting_warning=None,
+    )
+    out = format_recommendations(
+        [rec], merchant="cold_storage", amount_sgd=45, is_fcy=False
+    )
+    assert "counts toward" not in out
+
+
+# ---------------------------------------------------------------------------
+# v3: /pools nudge for end-of-period
+# ---------------------------------------------------------------------------
+
+
+async def test_pools_nudge_appears_when_near_period_end(storage, catalog):
+    """days_left <= delay+1 → ⏰ nudge line appears."""
+    await storage.add_card(1, "hsbc_revo")
+    await storage.set_posting_delay(1, "hsbc_revo", 1)
+    # Apr 29: 1 day left in April, delay=1, threshold=1+1=2 → nudge fires
+    text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 4, 29))
+    assert "⏰" in text
+    assert "HSBC" in text
+
+
+async def test_pools_no_nudge_when_not_near_end(storage, catalog):
+    """No nudge when far from period end."""
+    await storage.add_card(1, "hsbc_revo")
+    await storage.set_posting_delay(1, "hsbc_revo", 1)
+    # May 4: 27 days left, well outside delay+1=2 threshold
+    text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
+    assert "⏰" not in text
+
+
+# ---------------------------------------------------------------------------
+# v3: compute_recommendation_payload uses posting delays
+# ---------------------------------------------------------------------------
+
+
+async def test_compute_payload_passes_posting_delays(storage, catalog, merchants):
+    """Posting delays from storage are forwarded to recommend()."""
+    await storage.add_card(1, "hsbc_revo")
+    await storage.set_posting_delay(1, "hsbc_revo", 1)
+    payload = await compute_recommendation_payload(
+        "cold storage 45", 1, storage, catalog, merchants, today=date(2026, 4, 30)
+    )
+    assert payload.recs  # no error and recommendations produced
+
+
+async def test_compute_payload_posting_warning_on_period_boundary(storage, catalog, merchants):
+    """HSBC Revo T+1, Apr 30 → posting_date May 1 → posting_warning set."""
+    await storage.add_card(1, "hsbc_revo")
+    await storage.set_posting_delay(1, "hsbc_revo", 1)
+    payload = await compute_recommendation_payload(
+        "cold storage 45", 1, storage, catalog, merchants, today=date(2026, 4, 30)
+    )
+    revo = next(r for r in payload.recs if r.card_id == "hsbc_revo")
+    assert revo.posting_warning is not None
+    assert "May" in revo.posting_warning
+    assert "Apr" in revo.posting_warning
+
+
+async def test_compute_payload_no_warning_for_same_day_merchant(storage, catalog, merchants):
+    """same_day_posting merchants post on txn_date → no period crossing."""
+    await storage.add_card(1, "hsbc_revo")
+    await storage.set_posting_delay(1, "hsbc_revo", 1)
+    # shopee is same_day_posting=True → posting_date = txn_date = Apr 30 → same period
+    payload = await compute_recommendation_payload(
+        "shopee 45", 1, storage, catalog, merchants, today=date(2026, 4, 30)
+    )
+    revo = next(r for r in payload.recs if r.card_id == "hsbc_revo")
+    assert revo.posting_warning is None
+
+
+# ---------------------------------------------------------------------------
+# v3: anniversary month prompt
+# ---------------------------------------------------------------------------
+
+
+def test_format_anniversary_prompt_has_month_buttons():
+    from cardkaki.models import Card, Bonus, Rounding
+    card = Card(
+        id="kf_uob", name="KrisFlyer UOB",
+        issuer="uob", network="visa",
+        base_rate_mpd=1.2, rounding=Rounding(method="none"),
+        bonus=[], anniversary_year=True,
+    )
+    text, kb = format_anniversary_prompt(card)
+    assert "KrisFlyer UOB" in text
+    btn_data = {b.callback_data for row in kb.inline_keyboard for b in row}
+    assert "ann:kf_uob:1" in btn_data
+    assert "ann:kf_uob:12" in btn_data
+    assert "ann:kf_uob:skip" in btn_data

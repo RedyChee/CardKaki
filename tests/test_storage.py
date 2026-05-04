@@ -199,3 +199,77 @@ async def test_get_lady_choice_returns_most_recent_at_or_before_today(storage):
 
 async def test_get_lady_choice_none_when_unset(storage):
     assert await storage.get_lady_choice(1, today=date(2026, 5, 1)) is None
+
+
+# ---------------------------------------------------------------------------
+# v3: posting delays
+# ---------------------------------------------------------------------------
+
+
+async def test_set_posting_delay_round_trip(storage):
+    await storage.set_posting_delay(1, "hsbc_revo", 1)
+    delays = await storage.get_posting_delays(1)
+    assert delays == {"hsbc_revo": 1}
+
+
+async def test_set_posting_delay_overwrites(storage):
+    await storage.set_posting_delay(1, "hsbc_revo", 1)
+    await storage.set_posting_delay(1, "hsbc_revo", 3)
+    delays = await storage.get_posting_delays(1)
+    assert delays == {"hsbc_revo": 3}
+
+
+async def test_set_posting_delay_rejects_out_of_range(storage):
+    with pytest.raises(ValueError):
+        await storage.set_posting_delay(1, "hsbc_revo", -1)
+    with pytest.raises(ValueError):
+        await storage.set_posting_delay(1, "hsbc_revo", 8)
+
+
+async def test_get_posting_delays_returns_all_for_user(storage):
+    await storage.set_posting_delay(1, "hsbc_revo", 1)
+    await storage.set_posting_delay(1, "uob_ppv", 2)
+    await storage.set_posting_delay(2, "hsbc_revo", 3)
+    delays = await storage.get_posting_delays(1)
+    assert delays == {"hsbc_revo": 1, "uob_ppv": 2}
+
+
+async def test_get_posting_delays_empty(storage):
+    assert await storage.get_posting_delays(999) == {}
+
+
+# ---------------------------------------------------------------------------
+# v3: card anniversaries
+# ---------------------------------------------------------------------------
+
+
+async def test_set_anniversary_round_trip(storage):
+    await storage.set_anniversary(1, "krisflyer_uob", 3)
+    months = await storage.get_anniversaries(1)
+    assert months == {"krisflyer_uob": 3}
+
+
+async def test_set_anniversary_overwrites(storage):
+    await storage.set_anniversary(1, "krisflyer_uob", 3)
+    await storage.set_anniversary(1, "krisflyer_uob", 6)
+    months = await storage.get_anniversaries(1)
+    assert months == {"krisflyer_uob": 6}
+
+
+async def test_set_anniversary_rejects_out_of_range(storage):
+    with pytest.raises(ValueError):
+        await storage.set_anniversary(1, "krisflyer_uob", 0)
+    with pytest.raises(ValueError):
+        await storage.set_anniversary(1, "krisflyer_uob", 13)
+
+
+async def test_get_anniversaries_returns_all_for_user(storage):
+    await storage.set_anniversary(1, "krisflyer_uob", 3)
+    await storage.set_anniversary(1, "amex_kf", 7)
+    await storage.set_anniversary(2, "krisflyer_uob", 1)
+    months = await storage.get_anniversaries(1)
+    assert months == {"krisflyer_uob": 3, "amex_kf": 7}
+
+
+async def test_get_anniversaries_empty(storage):
+    assert await storage.get_anniversaries(999) == {}

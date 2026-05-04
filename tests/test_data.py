@@ -40,7 +40,16 @@ def test_card_invariants():
 def test_merchants_yaml_loads():
     merchants = load_merchants(DATA / "merchants.yaml")
     assert "klook" in merchants
-    assert "travel" in merchants["klook"]
-    assert "travel_excluded" in merchants["klook"]
-    assert "fast_food_excluded" in merchants["mcdonalds"]
-    assert "wallet_topup" in merchants["youtrip"]
+    assert "travel" in merchants["klook"].categories
+    assert "travel_excluded" in merchants["klook"].categories
+    assert "fast_food_excluded" in merchants["mcdonalds"].categories
+    assert "wallet_topup" in merchants["youtrip"].categories
+
+
+def test_merchants_same_day_posting_flag():
+    merchants = load_merchants(DATA / "merchants.yaml")
+    assert merchants["shopee"].same_day_posting is True
+    assert merchants["grab"].same_day_posting is True
+    assert merchants["ntuc"].same_day_posting is True
+    assert merchants["klook"].same_day_posting is False
+    assert merchants["amazon"].same_day_posting is False

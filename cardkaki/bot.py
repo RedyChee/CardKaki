@@ -22,12 +22,23 @@ from telegram.ext import (
     filters,
 )
 
+from .data import MerchantEntry
 from .models import Card, Recommendation, TxnRow
 from .parser import parse
 from .periods import days_left, period_bounds, period_label
 from .rule_engine import recommend, select_bonus_for_log
 from .storage import Storage
 from .usage import build_usage
+
+
+def _resolve_merchant(
+    merchants: dict[str, MerchantEntry], key: str
+) -> tuple[list[str], bool]:
+    """Return (categories, same_day_posting) for a merchant key."""
+    entry = merchants.get(key)
+    if entry is None:
+        return [], False
+    return entry.categories, entry.same_day_posting
 
 log = logging.getLogger(__name__)
 
@@ -104,15 +115,14 @@ def format_recommendations(
         # Surface secondary reasons (cap/min-spend warnings) on a continuation line.
         for i, r in enumerate(top):
             if len(r.reasons) > 1:
-                tail = " · ".join(r.reasons[1:])
-                # Don't repeat FCY-fee chatter on every card; only include
-                # reasons that look like warnings or cap/blend info.
                 relevant = [
                     x for x in r.reasons[1:]
                     if x.startswith("⚠") or x.startswith("cap ")
                 ]
                 if relevant:
                     rendered_lines.append(f"   {' · '.join(_md(x) for x in relevant)}")
+            if r.posting_warning:
+                rendered_lines.append(f"   ⚠ {_md(r.posting_warning)}")
 
     return "\n".join(header_bits + rendered_lines)
 
@@ -275,6 +285,8 @@ def format_pools(
     usage: dict[tuple[str, int], object],
     statement_days: dict[str, int],
     today: date,
+    posting_delays: dict[str, int] | None = None,
+    same_day_merchants: set[str] | None = None,
 ) -> tuple[str, InlineKeyboardMarkup | None]:
     """Per-card cap progress for /pools."""
     if not owned_cards:
@@ -283,6 +295,8 @@ def format_pools(
     lines = [f"📊 *Your caps* — {today.strftime('%b %Y')}", ""]
     sday_buttons: list[InlineKeyboardButton] = []
     pool_groups: dict[str, list[str]] = {}
+    nudge_lines: list[str] = []
+    _pd = posting_delays or {}
 
     for card in owned_cards:
         if card.pool:
@@ -311,6 +325,8 @@ def format_pools(
             lines.append("  no bonus categories — base rate only")
             lines.append("")
             continue
+
+        delay = _pd.get(card.id, card.posting_delay_days)
 
         for idx, bonus in enumerate(card.bonus):
             label = bonus.label or "bonus"
@@ -347,6 +363,30 @@ def format_pools(
                     lines.append(
                         f"    ⚠ S${gap:g} from min spend, {n} {day_word} left"
                     )
+
+            # v3 nudge: warn when near end of bonus cap period.
+            if (
+                card.tracks_by == "posting_date"
+                and posting_delays is not None
+                and bonus.cap_sgd is not None
+                and spend < bonus.cap_sgd
+            ):
+                n = days_left(cap_period, today, s_day)
+                if n <= delay + 1:
+                    day_word = "day" if n == 1 else "days"
+                    nudge = f"⏰ Last {n} {day_word} for {card.name} {label} cap"
+                    if same_day_merchants:
+                        names = ", ".join(
+                            m.replace("_", " ").title()
+                            for m in sorted(same_day_merchants)
+                        )
+                        nudge += f" — same-day posters: {names}"
+                    nudge_lines.append(nudge)
+
+        lines.append("")
+
+    if nudge_lines:
+        lines.extend(nudge_lines)
         lines.append("")
 
     shared_pools = [pool for pool, names in pool_groups.items() if len(names) > 1]
@@ -416,6 +456,25 @@ def format_statement_day_prompt(card: Card) -> tuple[str, InlineKeyboardMarkup]:
     return text, InlineKeyboardMarkup(rows)
 
 
+def format_anniversary_prompt(card: Card) -> tuple[str, InlineKeyboardMarkup]:
+    text = (
+        f"🗓 *{_md(card.name)}* earns miles on a membership-year cycle.\n"
+        "Which month did you open the card? Tap a month or skip."
+    )
+    months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+    rows = []
+    for i in range(0, 12, 4):
+        rows.append([
+            InlineKeyboardButton(months[m], callback_data=f"ann:{card.id}:{m + 1}")
+            for m in range(i, min(i + 4, 12))
+        ])
+    rows.append([InlineKeyboardButton("Skip", callback_data=f"ann:{card.id}:skip")])
+    return text, InlineKeyboardMarkup(rows)
+
+
 def format_lady_choice_keyboard(
     current: str | None,
 ) -> tuple[str, InlineKeyboardMarkup]:
@@ -465,7 +524,7 @@ async def compute_recommendation_payload(
     user_id: int,
     storage: Storage,
     catalog: dict[str, Card],
-    merchants: dict[str, list[str]],
+    merchants: dict[str, MerchantEntry],
     today: date | None = None,
 ) -> RecommendationPayload:
     today = today or date.today()
@@ -484,7 +543,7 @@ async def compute_recommendation_payload(
             )
         )
 
-    base_categories = list(merchants.get(parsed.merchant, []))
+    base_categories, same_day_merchant = _resolve_merchant(merchants, parsed.merchant)
     unknown = parsed.merchant not in merchants
 
     # Inject lady_chosen if the user owns Lady's and their chosen category
@@ -497,9 +556,11 @@ async def compute_recommendation_payload(
 
     # Materialize usage from txn history.
     statement_days = await storage.get_statement_days(user_id)
+    posting_delays = await storage.get_posting_delays(user_id)
+    anniversary_months = await storage.get_anniversaries(user_id)
     earliest_period_start = _earliest_period_start(owned_cards, today, statement_days)
     txns = await storage.list_transactions_since(user_id, since=earliest_period_start)
-    usage = build_usage(txns, owned_cards, today, statement_days)
+    usage = build_usage(txns, owned_cards, today, statement_days, posting_delays, anniversary_months)
 
     recs = recommend(
         owned_cards,
@@ -509,6 +570,9 @@ async def compute_recommendation_payload(
         today=today,
         usage=usage,
         statement_days=statement_days,
+        posting_delays=posting_delays or None,
+        same_day_merchant=same_day_merchant,
+        anniversary_months=anniversary_months or None,
     )
 
     all_excluded = bool(categories) and all(
@@ -555,7 +619,7 @@ async def handle_text_message(
     user_id: int,
     storage: Storage,
     catalog: dict[str, Card],
-    merchants: dict[str, list[str]],
+    merchants: dict[str, MerchantEntry],
     today: date | None = None,
 ) -> str:
     payload = await compute_recommendation_payload(
@@ -610,7 +674,7 @@ async def handle_log_command(
     user_id: int,
     storage: Storage,
     catalog: dict[str, Card],
-    merchants: dict[str, list[str]],
+    merchants: dict[str, MerchantEntry],
     today: date | None = None,
 ) -> tuple[str, InlineKeyboardMarkup | None]:
     """`/log <card> <merchant> <amount> [fcy] [yyyy-mm-dd]`"""
@@ -655,7 +719,7 @@ async def handle_log_command(
                 return (f"Couldn't parse `{extra}` — expected `fcy`/`sgd` or `yyyy-mm-dd`.", None)
 
     card = catalog[card_id]
-    base_categories = list(merchants.get(merchant, []))
+    base_categories, same_day_merchant = _resolve_merchant(merchants, merchant)
 
     # Lady's chosen-category injection at log time too.
     categories = list(base_categories)
@@ -665,10 +729,12 @@ async def handle_log_command(
             categories.append("lady_chosen")
 
     statement_days = await storage.get_statement_days(user_id)
+    posting_delays = await storage.get_posting_delays(user_id)
+    anniversary_months = await storage.get_anniversaries(user_id)
     owned_cards = [catalog[c] for c in owned if c in catalog]
     earliest = _earliest_period_start(owned_cards, txn_date, statement_days)
     txns = await storage.list_transactions_since(user_id, since=earliest)
-    usage = build_usage(txns, owned_cards, txn_date, statement_days)
+    usage = build_usage(txns, owned_cards, txn_date, statement_days, posting_delays, anniversary_months)
 
     bonus_idx, bonus_label, miles = select_bonus_for_log(
         card, categories, amount, is_fcy, txn_date, usage, statement_days
@@ -688,7 +754,7 @@ async def handle_log_command(
 
     # Re-build usage including the just-logged txn for the confirmation footer.
     txns_after = await storage.list_transactions_since(user_id, since=earliest)
-    usage_after = build_usage(txns_after, owned_cards, txn_date, statement_days)
+    usage_after = build_usage(txns_after, owned_cards, txn_date, statement_days, posting_delays, anniversary_months)
     txn = TxnRow(
         tx_id=tx_id,
         telegram_user_id=user_id,
@@ -710,15 +776,22 @@ async def handle_pools_command(
     storage: Storage,
     catalog: dict[str, Card],
     today: date | None = None,
+    merchants: dict[str, MerchantEntry] | None = None,
 ) -> tuple[str, InlineKeyboardMarkup | None]:
     today = today or date.today()
     owned = await storage.list_cards(user_id)
     owned_cards = [catalog[c] for c in owned if c in catalog]
     statement_days = await storage.get_statement_days(user_id)
+    posting_delays = await storage.get_posting_delays(user_id)
+    anniversary_months = await storage.get_anniversaries(user_id)
     earliest = _earliest_period_start(owned_cards, today, statement_days) if owned_cards else today
     txns = await storage.list_transactions_since(user_id, since=earliest)
-    usage = build_usage(txns, owned_cards, today, statement_days)
-    return format_pools(owned_cards, usage, statement_days, today)
+    usage = build_usage(txns, owned_cards, today, statement_days, posting_delays, anniversary_months)
+    same_day = (
+        {k for k, v in merchants.items() if v.same_day_posting}
+        if merchants else None
+    )
+    return format_pools(owned_cards, usage, statement_days, today, posting_delays or None, same_day)
 
 
 async def handle_recent_command(
@@ -796,6 +869,29 @@ async def _maybe_prompt_statement_day(
         await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
 
+async def _maybe_prompt_anniversary(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    card: Card,
+    user_id: int,
+) -> None:
+    """Send an anniversary-month prompt for a freshly-added card if it
+    uses anniversary_year periods and the user hasn't set one yet."""
+    if not card.anniversary_year:
+        return
+    storage: Storage = context.application.bot_data["storage"]
+    months = await storage.get_anniversaries(user_id)
+    if card.id in months:
+        return
+    text, kb = format_anniversary_prompt(card)
+    if update.callback_query and update.callback_query.message:
+        await update.callback_query.message.reply_text(
+            text, reply_markup=kb, parse_mode="Markdown"
+        )
+    elif update.message:
+        await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+
+
 async def _cards_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not query or not update.effective_user:
@@ -833,6 +929,7 @@ async def _cards_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
     if added_card is not None:
         await _maybe_prompt_statement_day(update, context, added_card, user_id)
+        await _maybe_prompt_anniversary(update, context, added_card, user_id)
 
 
 async def _text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -840,7 +937,7 @@ async def _text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     storage: Storage = context.application.bot_data["storage"]
     catalog: dict[str, Card] = context.application.bot_data["cards"]
-    merchants: dict[str, list[str]] = context.application.bot_data["merchants"]
+    merchants: dict[str, MerchantEntry] = context.application.bot_data["merchants"]
     pending_logs: dict[str, dict] = context.application.bot_data.setdefault(
         "pending_logs", {}
     )
@@ -863,7 +960,7 @@ async def _log(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     storage: Storage = context.application.bot_data["storage"]
     catalog: dict[str, Card] = context.application.bot_data["cards"]
-    merchants: dict[str, list[str]] = context.application.bot_data["merchants"]
+    merchants: dict[str, MerchantEntry] = context.application.bot_data["merchants"]
     args = (update.message.text or "").split()[1:]
     text, kb = await handle_log_command(
         args, update.effective_user.id, storage, catalog, merchants
@@ -876,7 +973,8 @@ async def _pools(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     storage: Storage = context.application.bot_data["storage"]
     catalog: dict[str, Card] = context.application.bot_data["cards"]
-    text, kb = await handle_pools_command(update.effective_user.id, storage, catalog)
+    merchants: dict[str, MerchantEntry] = context.application.bot_data["merchants"]
+    text, kb = await handle_pools_command(update.effective_user.id, storage, catalog, merchants=merchants)
     await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
 
@@ -914,7 +1012,7 @@ async def _log_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     storage: Storage = context.application.bot_data["storage"]
     catalog: dict[str, Card] = context.application.bot_data["cards"]
-    merchants: dict[str, list[str]] = context.application.bot_data["merchants"]
+    merchants: dict[str, MerchantEntry] = context.application.bot_data["merchants"]
     args = [info["card_id"], info["merchant"], str(info["amount_sgd"])]
     if info["is_fcy"]:
         args.append("fcy")
@@ -957,7 +1055,8 @@ async def _pools_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     storage: Storage = context.application.bot_data["storage"]
     catalog: dict[str, Card] = context.application.bot_data["cards"]
-    text, kb = await handle_pools_command(update.effective_user.id, storage, catalog)
+    merchants: dict[str, MerchantEntry] = context.application.bot_data["merchants"]
+    text, kb = await handle_pools_command(update.effective_user.id, storage, catalog, merchants=merchants)
     if query.message:
         await query.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
@@ -1019,6 +1118,47 @@ async def _lc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+async def _ann_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not update.effective_user or not query.data:
+        return
+    await query.answer()
+    storage: Storage = context.application.bot_data["storage"]
+    catalog: dict[str, Card] = context.application.bot_data["cards"]
+    parts = query.data.split(":", 2)
+    if len(parts) != 3:
+        return
+    _, card_id, action = parts
+    card = catalog.get(card_id)
+    if card is None:
+        return
+
+    if action == "skip":
+        await query.edit_message_text(
+            f"Using card-level default for *{_md(card.name)}*. "
+            "You can set it later via /cards.",
+            parse_mode="Markdown",
+        )
+        return
+    try:
+        month = int(action)
+    except ValueError:
+        return
+    try:
+        await storage.set_anniversary(update.effective_user.id, card_id, month)
+    except ValueError as e:
+        await query.edit_message_text(f"⚠️ {e}")
+        return
+    month_name = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ][month - 1]
+    await query.edit_message_text(
+        f"✅ *{_md(card.name)}* anniversary month set to {month_name}.",
+        parse_mode="Markdown",
+    )
+
+
 BOT_COMMANDS = [
     BotCommand("start", "Set up your wallet and get started"),
     BotCommand("help", "Show help and available commands"),
@@ -1034,7 +1174,7 @@ def build_application(
     token: str,
     storage: Storage,
     cards: dict[str, Card],
-    merchants: dict[str, list[str]],
+    merchants: dict[str, MerchantEntry],
 ) -> Application:
     app = Application.builder().token(token).build()
     app.bot_data["storage"] = storage
@@ -1055,6 +1195,7 @@ def build_application(
     app.add_handler(CallbackQueryHandler(_pools_callback, pattern=r"^pools$"))
     app.add_handler(CallbackQueryHandler(_sday_callback, pattern=r"^sday:"))
     app.add_handler(CallbackQueryHandler(_lc_callback, pattern=r"^lc:"))
+    app.add_handler(CallbackQueryHandler(_ann_callback, pattern=r"^ann:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _text))
     app.add_error_handler(_error_handler)
     return app

@@ -16,13 +16,32 @@ def load_cards(path: Path) -> dict[str, Card]:
     return by_id
 
 
-def load_merchants(path: Path) -> dict[str, list[str]]:
+class MerchantEntry:
+    __slots__ = ("categories", "same_day_posting")
+
+    def __init__(self, categories: list[str], same_day_posting: bool = False) -> None:
+        self.categories = categories
+        self.same_day_posting = same_day_posting
+
+
+def load_merchants(path: Path) -> dict[str, MerchantEntry]:
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
-        raise ValueError(f"{path} must be a mapping of merchant -> [categories]")
-    out: dict[str, list[str]] = {}
+        raise ValueError(f"{path} must be a mapping of merchant -> categories")
+    out: dict[str, MerchantEntry] = {}
     for k, v in raw.items():
-        if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
-            raise ValueError(f"{path}: merchant {k!r} must map to list[str]")
-        out[k] = v
+        if isinstance(v, list):
+            if not all(isinstance(x, str) for x in v):
+                raise ValueError(f"{path}: merchant {k!r} must map to list[str]")
+            out[k] = MerchantEntry(categories=v)
+        elif isinstance(v, dict):
+            cats = v.get("categories", [])
+            if not isinstance(cats, list) or not all(isinstance(x, str) for x in cats):
+                raise ValueError(f"{path}: merchant {k!r} 'categories' must be list[str]")
+            out[k] = MerchantEntry(
+                categories=cats,
+                same_day_posting=bool(v.get("same_day_posting", False)),
+            )
+        else:
+            raise ValueError(f"{path}: merchant {k!r} must map to list[str] or dict")
     return out

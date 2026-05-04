@@ -146,14 +146,14 @@ simplygo:        [transport, public_transit]
 
 The smallest thing that's already useful. No state, no caps, no logging.
 
-- [ ] Repo + dependencies (`python-telegram-bot`, `pyyaml`, `pydantic`, `pytest`)
-- [ ] `cards.yaml` for 6–8 cards I actually own + popular ones (HSBC Revo, UOB PPV/VS/PRVI, Citi Rewards/PM, DBS Altitude, Amex KF)
-- [ ] `merchants.yaml` seed list (~50 SG merchants)
-- [ ] `rule_engine.py` — `recommend()` function with rounding + FCY
-- [ ] `tests/` — 20+ pytest cases covering edge cases (UOB rounding, FCY fees, MCC exclusions)
-- [ ] `bot.py` — Telegram webhook, parse `merchant amount [fcy]`, `/cards add/remove/list`
-- [ ] Deploy to Railway (attach a persistent volume for `users.sqlite`)
-- [ ] Send to 3 friends, watch them break the parser, iterate
+- [x] Repo + dependencies (`python-telegram-bot`, `pyyaml`, `pydantic`, `pytest`)
+- [x] `cards.yaml` for 6–8 cards I actually own + popular ones (HSBC Revo, UOB PPV/VS/PRVI, Citi Rewards/PM, DBS Altitude, Amex KF)
+- [x] `merchants.yaml` seed list (~50 SG merchants)
+- [x] `rule_engine.py` — `recommend()` function with rounding + FCY
+- [x] `tests/` — 20+ pytest cases covering edge cases (UOB rounding, FCY fees, MCC exclusions)
+- [x] `bot.py` — Telegram webhook, parse `merchant amount [fcy]`, `/cards add/remove/list`
+- [x] Deploy to Railway (attach a persistent volume for `users.sqlite`)
+- [x] Send to 3 friends, watch them break the parser, iterate
 
 **Ship gate:** Bot returns correct recommendations for 10 hand-crafted scenarios in <500ms.
 
@@ -183,12 +183,21 @@ This is when the bot becomes genuinely sticky.
 
 ### v3 — Posting date intelligence (month 2)
 
-The unique-vs-HeyMax layer.
+The unique-vs-HeyMax layer. HeyMax tracks via Visa Offers Platform — transaction-date only, network-locked. This bot can go further: model each issuer's posting lag and warn before period boundaries eat your cap.
 
-- [ ] Encode each issuer's typical posting behavior (T+1/T+2/T+3, weekend handling)
-- [ ] "This will post Mon 5 May, after your Apr statement closes" warnings
-- [ ] End-of-period nudges: "Last 2 days for HSBC Revo cap — same-day posters: Grab, Shopee, NTUC"
-- [ ] Membership-year tracking for cards like KrisFlyer UOB
+- [x] Add `posting_delay_days` to `cards.yaml`: typical lag in days (T+1=HSBC/Citi, T+2=UOB, T+3=Amex) + weekend skip rule
+- [x] Tag merchants known to post same-day in `merchants.yaml` (`same_day_posting: true` for Grab, Shopee, NTUC)
+- [x] `resolve_posting_date(txn_date, delay_days, same_day_merchant)` — predicts posting date, skips weekends
+- [x] Detect period boundary: flag when `txn_date` and predicted `posting_date` land in different cap periods
+- [x] Append posting warning to recommendations: `"⚠ Posts Fri 1 May — counts toward May cap, not Apr"`
+- [x] End-of-period nudge in `/pools`: "⏰ Last N days for HSBC Revo cap — same-day posters: Grab, Shopee..."
+- [x] Per-user posting delay override stored in SQLite (same pattern as statement closing days)
+- [x] `anniversary_year` cap period in rule engine: 12-month window from card opening month, resets annually
+- [x] Per-user anniversary month stored in SQLite; inline keyboard prompt on `/cards add` for anniversary_year cards
+
+**Architecture:** posting_date threaded into rule engine (Approach B) — cap math is actually correct, not cosmetic. For `tracks_by: posting_date` cards, both `recommend()` and `build_usage()` evaluate period membership against predicted posting date.
+
+**Ship gate:** Transaction at 11 pm on 30 Apr shows `"Posts Fri 1 May — counts toward May cap, not Apr"` for HSBC Revo. `/pools` on 29 Apr shows nudge for HSBC Revo (1 day left, delay=1, threshold=2).
 
 ### v4 — The Milelion knowledge layer (month 3)
 
