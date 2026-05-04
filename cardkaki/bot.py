@@ -309,8 +309,13 @@ def format_log_confirmation(
             bonus = card.bonus[txn.bonus_idx]
             if bonus.cap_sgd is not None:
                 pct = int(round(u.spend_sgd / bonus.cap_sgd * 100))
+                _today = date.today()
+                if txn.txn_date.year == _today.year and txn.txn_date.month == _today.month:
+                    period_pfx = "This period"
+                else:
+                    period_pfx = txn.txn_date.strftime("%b %Y") + " period"
                 lines.append(
-                    f"This period on {_md(card.name)} {_md(bonus.label or '')}: "
+                    f"{period_pfx} on {_md(card.name)} {_md(bonus.label or '')}: "
                     f"S${u.spend_sgd:g} / S${bonus.cap_sgd:g} ({pct}%)"
                 )
 
