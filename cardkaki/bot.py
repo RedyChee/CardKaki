@@ -314,9 +314,16 @@ def format_log_confirmation(
                     period_pfx = "This period"
                 else:
                     period_pfx = txn.txn_date.strftime("%b %Y") + " period"
+                remaining = bonus.cap_sgd - u.spend_sgd
+                if remaining <= 0:
+                    cap_note = "  ⚠ cap reached"
+                elif pct >= 80:
+                    cap_note = f"  ⚠ S${remaining:g} remaining"
+                else:
+                    cap_note = ""
                 lines.append(
                     f"{period_pfx} on {_md(card.name)} {_md(bonus.label or '')}: "
-                    f"S${u.spend_sgd:g} / S${bonus.cap_sgd:g} ({pct}%)"
+                    f"S${u.spend_sgd:g} / S${bonus.cap_sgd:g} ({pct}%){cap_note}"
                 )
 
     kb = InlineKeyboardMarkup([[
