@@ -28,6 +28,7 @@ from .data import MerchantEntry
 from .models import Card, Recommendation, TxnRow
 from .parser import parse
 from .periods import days_left, period_bounds, period_label
+from .posting import posting_period_warning, resolve_posting_date
 from .rule_engine import recommend, select_bonus_for_log
 from .storage import Storage
 from .usage import build_usage
@@ -317,7 +318,8 @@ def _parse_friendly_date(text: str, today: date) -> date | None:
 
 
 def format_log_confirmation(
-    txn: TxnRow, card: Card, usage_after: dict[tuple[str, int], object] | None = None
+    txn: TxnRow, card: Card, usage_after: dict[tuple[str, int], object] | None = None,
+    posting_warning: str | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Reply text + buttons after logging a transaction."""
     lines = [f"📝 Logged: *{_md(card.name)}*"]
@@ -348,6 +350,9 @@ def format_log_confirmation(
                     f"{period_pfx} on {_md(card.name)} {_md(bonus.label or '')}: "
                     f"S${u.spend_sgd:g} / S${bonus.cap_sgd:g} ({pct}%){cap_note}"
                 )
+
+    if posting_warning:
+        lines.append(f"⚠ {posting_warning}")
 
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton("↩ Undo", callback_data=f"undo:{txn.tx_id}"),
@@ -816,6 +821,20 @@ async def handle_log_command(
         card, categories, amount, is_fcy, txn_date, usage, statement_days
     )
 
+    posting_warning: str | None = None
+    if card.tracks_by == "posting_date" and bonus_idx is not None:
+        delay = posting_delays.get(card.id, card.posting_delay_days)
+        p_date = resolve_posting_date(txn_date, delay, same_day_merchant)
+        if p_date != txn_date:
+            cap_period = card.bonus[bonus_idx].cap_period or "calendar_month"
+            posting_warning = posting_period_warning(
+                txn_date=txn_date,
+                posting_date=p_date,
+                period=cap_period,
+                statement_day=statement_days.get(card.id),
+                anniversary_month=anniversary_months.get(card.id),
+            )
+
     tx_id = await storage.log_transaction(
         telegram_user_id=user_id,
         card_id=card_id,
@@ -844,7 +863,7 @@ async def handle_log_command(
         txn_date=txn_date,
         created_at=__import__("datetime").datetime.now(),
     )
-    return format_log_confirmation(txn, card, usage_after=usage_after)
+    return format_log_confirmation(txn, card, usage_after=usage_after, posting_warning=posting_warning)
 
 
 async def handle_pools_command(
