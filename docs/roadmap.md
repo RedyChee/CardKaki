@@ -1,6 +1,6 @@
 # Roadmap
 
-Status as of 2026-05-05; checkboxes reflect what's shipped.
+Status as of 2026-05-06; checkboxes reflect what's shipped.
 
 ## v1 — Stateless recommender (weekend, ~2 days)
 
@@ -58,6 +58,15 @@ The unique-vs-HeyMax layer. HeyMax tracks via Visa Offers Platform — transacti
 **Architecture:** posting_date threaded into rule engine (Approach B) — cap math is actually correct, not cosmetic. For `tracks_by: posting_date` cards, both `recommend()` and `build_usage()` evaluate period membership against predicted posting date. See [Decision #3](decisions.md#3-approach-b-for-posting-date-threading).
 
 **Ship gate:** Transaction at 11 pm on 30 Apr shows `"Posts Fri 1 May — counts toward May cap, not Apr"` for HSBC Revo. `/pools` on 29 Apr shows nudge for HSBC Revo (1 day left, delay=1, threshold=2).
+
+**Post-v3 UX polish (shipped):**
+- Recommendations: MPD-only display (no absolute miles), top-5 cards with medals 🥇🥈🥉4️⃣5️⃣, `_(tied)_` notation for tied ranks
+- `/help` split into Simple / Advanced views with ⚙️ toggle
+- `/recent` edit mode — ✏️ Enter / ← Done, bulk 🗑 delete without per-action confirmation
+- `/pools` progress bars and miles-earned tracking
+- `/lady_choice` updated to 7 correct UOB categories with tag-based matching
+- Card catalog buttons include `descriptor` value-prop
+- Log confirmation shows cap progress bar
 
 ## v4 — The Milelion knowledge layer (month 3)
 

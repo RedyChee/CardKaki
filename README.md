@@ -30,13 +30,15 @@ A **deterministic rule engine** wrapped in a **Telegram bot**. You message it `c
 
 ```
 You: cold storage 45
-Bot: 🥇 HSBC Revo: 180 mi (4.0 mpd) ✓ groceries
-     🥈 UOB PPV:    140 mi (3.1 mpd) ⚠ in-store, not contactless?
-     🥉 Citi Rewards: 18 mi (0.4 mpd)
+Bot: 🥇 HSBC Revo:     4.0 mpd ✓ groceries
+     🥈 UOB PPV:       3.1 mpd ⚠ in-store, not contactless?
+     🥉 Citi Rewards:  0.4 mpd — base rate
+     4️⃣ DBS Altitude:  0.4 mpd — base rate
+     5️⃣ Amex KF:       0.3 mpd — base rate
 
 You: klook 320
 Bot: ⚠️  MCC 4722 (travel) — most 4mpd cards exclude this
-     🥇 UOB PRVI: 448 mi (1.4 mpd) base
+     🥇 UOB PRVI: 1.4 mpd — base rate
      Use UOB PRVI or any general-spend card.
 ```
 

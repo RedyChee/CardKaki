@@ -52,7 +52,7 @@ The blue (pure) modules have no I/O. The bot layer assembles all inputs from sto
 | Path | Responsibility | Key surface |
 |---|---|---|
 | `cardkaki/server.py` | FastAPI app exposing `/webhook` for Telegram | `app`, `webhook()` |
-| `cardkaki/bot.py` | Command + callback handlers, message formatting, inline keyboards | `_start`, `_cards`, `_log`, `_pools`, `_recent`, `_lady_choice`, `_text`, callback routers |
+| `cardkaki/bot.py` | Command + callback handlers, message formatting, inline keyboards | `_start`, `_help`, `_cards`, `_log`, `_pools`, `_recent`, `_lady_choice`, `_text`; `_help_toggle_callback`, `_recent_edit_callback`, `_recent_done_callback`, `_del_edit_callback`, `_restore_edit_callback`, other callback routers |
 | `cardkaki/parser.py` | Free-text → `ParsedInput` (merchant, amount, fcy flag) | `parse(text)` |
 | `cardkaki/rule_engine.py` | Pure scoring: rank cards by miles for one transaction | `recommend()`, `select_bonus_for_log()` |
 | `cardkaki/usage.py` | Pure rollup: `TxnRow[]` → per-(card, bonus) period spend | `build_usage()` |
@@ -343,6 +343,7 @@ Each card is a `Card` object (Pydantic, `extra="forbid"` — typos fail at start
 ```yaml
 - id: hsbc_revo                       # stable string id, used in URLs/SQL
   name: HSBC Revolution               # display name
+  descriptor: "online & contactless"  # optional: value-prop shown in /cards catalog buttons
   issuer: hsbc
   network: visa                       # visa | mastercard | amex
   base_rate_mpd: 0.4
@@ -468,7 +469,7 @@ Notes:
 ### 7.4 Pydantic + dataclass models
 
 ```python
-class Card(BaseModel):           # pydantic, extra="forbid"
+class Card(BaseModel):           # pydantic, extra="forbid"; descriptor: str | None for catalog display
 class Bonus(BaseModel):
 class Rounding(BaseModel):
 class ParsedInput(BaseModel):    # parser output: merchant, amount_sgd, is_fcy
@@ -486,19 +487,22 @@ class BonusUsage:                # spend_sgd, min_spend_sgd — usage rollup out
 
 | Command | What it does |
 |---|---|
-| `/start` | Onboarding, command summary, links to /cards catalog |
-| `/cards` | List wallet; `/cards add <id>`, `/cards remove <id>`, `/cards list`, `/cards catalog` |
+| `/start` | Onboarding — brief 5-line essentials with quick-start examples |
+| `/help` | Command reference with two views: **Simple guide** (task-focused, default) and **Advanced syntax** (full flags). Toggle with the ⚙️ / ← button. |
+| `/cards` | List wallet; `/cards add <id>`, `/cards remove <id>`, `/cards list`, `/cards catalog` (catalog buttons include `descriptor` value-prop) |
 | `/log` | Two paths: `/log <card> <merchant> <amount> [fcy] [yyyy-mm-dd]` direct, or `/log <merchant> <amount>` to open the card-picker |
-| `/pools` | Show all caps grouped by redemption pool, with days-left / posting-cliff nudges |
-| `/recent` | Last N logged txns; per-row 🗑 button to delete |
-| `/lady_choice` | Set/inspect UOB Lady's chosen category |
-| free text | `merchant amount [fcy]` → recommendation; identical to `/log` without `/log` |
+| `/pools` | Show all caps grouped by redemption pool, with progress bars, miles earned, and days-left / posting-cliff nudges |
+| `/recent` | Last N logged txns; ✏️ Edit button enters edit mode — shows 🗑 per transaction for bulk delete. ← Done exits edit mode. |
+| `/lady_choice` | Set/inspect UOB Lady's chosen category. Seven UOB categories: Dining, Beauty & Wellness, Entertainment, Fashion, Family, Transport, Travel. Each maps to one or more internal merchant tags (e.g. "dining" → `dining_local` + `dining_delivery`). |
+| free text | `merchant amount [fcy]` → recommendation; top-5 cards ranked by MPD with medals 🥇🥈🥉4️⃣5️⃣; tied cards marked `_(tied)_` |
 
 ### 8.2 Inline keyboard patterns
 
 - **📝 Log this** appears under recommendations — taps open the same `/log` flow with merchant/amount/card pre-filled.
-- **🗑 Delete** appears next to each row in `/recent`.
-- **↩ Undo** appears immediately after a delete confirmation, restoring the deleted row.
+- **✏️ Edit / ← Done** toggle on `/recent` — Enter/exit bulk-delete edit mode. 🗑 buttons are only shown in edit mode; ↩ Restore appears after each in-edit delete.
+- **🗑 Delete** (edit mode only) per transaction in `/recent`. Callback: `del_edit:<tx_id>`.
+- **↩ Undo / Restore** — `↩ Undo` after a normal delete; `↩ Restore` for in-edit-mode deletes. Callback: `restore_edit:<tx_id>`.
+- **⚙️ Advanced syntax / ← Simple guide** toggle on `/help`. Callbacks: `help:advanced`, `help:simple`.
 - **Statement-day prompt** fires on `/cards add` for cards using `statement_month` periods.
 - **Anniversary-month prompt** fires on `/cards add` for cards declaring `anniversary_year: true`.
 - **Log card-picker** for `/log <merchant> <amount>` when the user doesn't pre-name a card; shows one button per owned card.
