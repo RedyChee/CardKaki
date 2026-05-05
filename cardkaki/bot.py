@@ -646,7 +646,7 @@ async def compute_recommendation_payload(
         today=today,
         usage=usage,
         statement_days=statement_days,
-        posting_delays=posting_delays or None,
+        posting_delays=posting_delays,
         same_day_merchant=same_day_merchant,
         anniversary_months=anniversary_months or None,
     )
