@@ -48,4 +48,4 @@ def posting_period_warning(
     post_day = posting_date.day
     post_month = _MONTHS_SHORT[posting_date.month - 1]
     txn_month = _MONTHS_SHORT[txn_date.month - 1]
-    return f"Posts {day_name} {post_day} {post_month} — counts toward {post_month} cap, not {txn_month}"
+    return f"Posts {day_name} {post_day} {post_month} — counts toward {post_month}'s cap, not {txn_month}'s"

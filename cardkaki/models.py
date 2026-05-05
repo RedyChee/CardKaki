@@ -35,6 +35,7 @@ class Card(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
     name: str
+    descriptor: str = ""
     issuer: str
     network: Literal["visa", "mastercard", "amex"]
     base_rate_mpd: float = 0.4

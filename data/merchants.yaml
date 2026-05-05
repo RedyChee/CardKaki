@@ -67,9 +67,9 @@ sistic:          [entertainment]
 ticketmaster:    [entertainment]
 
 # --- shopping / dept store ---
-uniqlo:          [shopping, dept_store, contactless]
-zara:            [shopping, dept_store, contactless]
-hm:              [shopping, dept_store, contactless]
+uniqlo:          [shopping, dept_store, fashion, contactless]
+zara:            [shopping, dept_store, fashion, contactless]
+hm:              [shopping, dept_store, fashion, contactless]
 courts:          [shopping, dept_store, contactless]
 takashimaya:     [shopping, dept_store, contactless]
 tangs:           [shopping, dept_store, contactless]

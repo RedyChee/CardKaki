@@ -7,6 +7,7 @@
 
 - id: hsbc_revo
   name: HSBC Revolution
+  descriptor: online & contactless
   issuer: hsbc
   network: visa
   base_rate_mpd: 0.4
@@ -34,6 +35,7 @@
 
 - id: uob_ppv
   name: UOB Preferred Platinum Visa
+  descriptor: mobile pay & online
   issuer: uob
   network: visa
   base_rate_mpd: 0.4
@@ -64,6 +66,7 @@
 
 - id: uob_vs
   name: UOB Visa Signature
+  descriptor: overseas & contactless
   issuer: uob
   network: visa
   base_rate_mpd: 0.4
@@ -102,6 +105,7 @@
 
 - id: uob_prvi
   name: UOB PRVI Miles
+  descriptor: Agoda & Expedia
   issuer: uob
   network: visa
   base_rate_mpd: 1.4
@@ -133,6 +137,7 @@
 
 - id: uob_lady
   name: UOB Lady's Card
+  descriptor: chosen category
   issuer: uob
   network: visa
   base_rate_mpd: 0.4
@@ -155,6 +160,7 @@
 
 - id: citi_rewards
   name: Citi Rewards
+  descriptor: online & shopping
   issuer: citi
   network: visa
   base_rate_mpd: 0.4
@@ -180,6 +186,7 @@
 
 - id: citi_pm
   name: Citi PremierMiles
+  descriptor: travel base rate
   issuer: citi
   network: visa
   base_rate_mpd: 1.2
@@ -213,6 +220,7 @@
 
 - id: dbs_altitude
   name: DBS Altitude
+  descriptor: travel & forex
   issuer: dbs
   network: visa
   base_rate_mpd: 1.3
@@ -228,6 +236,7 @@
 
 - id: dbs_woman
   name: DBS Woman's World
+  descriptor: online shopping
   issuer: dbs
   network: visa
   base_rate_mpd: 0.4
@@ -254,6 +263,7 @@
 
 - id: amex_kf
   name: Amex KrisFlyer
+  descriptor: KrisFlyer direct
   issuer: amex
   network: amex
   base_rate_mpd: 1.1
@@ -286,6 +296,7 @@
 
 - id: maybank_xl
   name: Maybank XL Rewards
+  descriptor: dining & travel
   issuer: maybank
   network: visa
   base_rate_mpd: 0.4

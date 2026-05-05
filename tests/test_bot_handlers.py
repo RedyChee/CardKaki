@@ -116,7 +116,7 @@ async def test_text_recommendation(storage, catalog, merchants):
     await handle_cards_command(["add", "hsbc_revo"], 1, storage, catalog)
     reply = await handle_text_message("cold storage 45", 1, storage, catalog, merchants)
     assert "HSBC Revolution" in reply
-    assert "180 mi" in reply  # 45 * 4mpd, floor_sgd_1
+    assert "4.0 mpd" in reply
 
 
 async def test_text_klook_fcy_routes_correctly(storage, catalog, merchants):
@@ -175,7 +175,7 @@ def test_format_recs_single():
     )
     assert "🥇" in out
     assert "HSBC Revolution" in out
-    assert "180 mi" in out
+    assert "180 mi" not in out
     assert "4.0 mpd" in out
 
 
@@ -183,8 +183,9 @@ def test_format_recs_tie_uses_silver_medal():
     a = Recommendation(card_id="a", card_name="Card A", miles=200, effective_mpd=4.0)
     b = Recommendation(card_id="b", card_name="Card B", miles=200, effective_mpd=4.0)
     out = format_recommendations([a, b], merchant="x", amount_sgd=50, is_fcy=False)
-    assert out.count("🥈") == 2  # both tied entries get silver medal
-    assert "=" not in out.split("\n")[1]  # no plain = marker on tied lines
+    assert "🥇" in out  # first card still gets gold positionally
+    assert "🥈" in out  # second tied card gets silver
+    assert "(tied)" in out  # tied note on second card
 
 
 def test_format_card_list_empty(catalog):
@@ -372,9 +373,9 @@ async def test_pools_reflects_logged_txn(storage, catalog, merchants):
         today=date(2026, 5, 4),
     )
     text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
-    # online retail used: S$200 / S$600 (33%)
+    # online retail used: S$200 / S$600
     assert "200" in text
-    assert "33%" in text
+    assert "600" in text
 
 
 # ---------------------------------------------------------------------------
@@ -397,7 +398,7 @@ async def test_recent_command_with_delete_button(storage, catalog, merchants):
     assert "shopee" in text
     assert kb is not None
     all_btns = [b for row in kb.inline_keyboard for b in row]
-    assert any((b.callback_data or "").startswith("del:") for b in all_btns)
+    assert any((b.callback_data or "") == "recent:edit" for b in all_btns)
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +411,9 @@ async def test_lady_choice_command_no_args_renders_keyboard(storage):
     assert "Lady" in text
     assert kb is not None
     btn_data = {b.callback_data for row in kb.inline_keyboard for b in row}
-    assert "lc:dining_local" in btn_data
+    assert "lc:dining" in btn_data
+    assert "lc:fashion" in btn_data
+    assert "lc:travel" in btn_data
 
 
 async def test_lady_choice_command_sets_category(storage):
