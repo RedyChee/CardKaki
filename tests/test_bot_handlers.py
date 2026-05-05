@@ -71,7 +71,7 @@ async def test_cards_default_to_list(storage, catalog):
 
 async def test_cards_add_valid(storage, catalog):
     reply = await handle_cards_command(["add", "hsbc_revo"], 1, storage, catalog)
-    assert "Added" in reply
+    assert "added" in reply.lower()
     assert "HSBC Revolution" in reply
 
 
@@ -98,7 +98,7 @@ async def test_cards_list_after_add(storage, catalog):
 async def test_cards_remove(storage, catalog):
     await handle_cards_command(["add", "hsbc_revo"], 1, storage, catalog)
     reply = await handle_cards_command(["remove", "hsbc_revo"], 1, storage, catalog)
-    assert "Removed" in reply
+    assert "removed" in reply.lower()
     reply2 = await handle_cards_command(["remove", "hsbc_revo"], 1, storage, catalog)
     assert "wasn't in" in reply2
 
@@ -179,11 +179,12 @@ def test_format_recs_single():
     assert "4.0 mpd" in out
 
 
-def test_format_recs_tie_uses_equal_marker():
+def test_format_recs_tie_uses_silver_medal():
     a = Recommendation(card_id="a", card_name="Card A", miles=200, effective_mpd=4.0)
     b = Recommendation(card_id="b", card_name="Card B", miles=200, effective_mpd=4.0)
     out = format_recommendations([a, b], merchant="x", amount_sgd=50, is_fcy=False)
-    assert out.count("=") >= 2  # both top entries marked with =, no medal
+    assert out.count("🥈") == 2  # both tied entries get silver medal
+    assert "=" not in out.split("\n")[1]  # no plain = marker on tied lines
 
 
 def test_format_card_list_empty(catalog):
@@ -416,7 +417,7 @@ async def test_lady_choice_command_sets_category(storage):
     text, kb = await handle_lady_choice_command(
         ["dining_local"], 1, storage, today=date(2026, 5, 4)
     )
-    assert "Set" in text
+    assert "set" in text.lower()
     cat = await storage.get_lady_choice(1, today=date(2026, 5, 4))
     assert cat == "dining_local"
 

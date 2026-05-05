@@ -52,18 +52,24 @@ def _md(s: str) -> str:
 
 
 WELCOME = (
-    "👋 *CardKaki* — tells you which SG card to use at checkout.\n\n"
+    "👋 *CardKaki* — your SG miles co-pilot.\n\n"
+    "Just type a merchant and amount:\n"
+    "`cold storage 45`  ·  `klook 320 fcy`\n\n"
+    "Tap 📝 to log. Use /cards to manage your wallet.\n\n"
+    "_Rates are best-effort (Milelion). Verify against your statement._"
+)
+
+HELP = (
+    "*CardKaki* — SG miles recommender\n\n"
     "*Manage your wallet:* /cards\n"
     "*Log a purchase:* `/log <card> <merchant> <amount> [fcy] [yyyy-mm-dd]`\n"
     "*See cap usage:* /pools\n"
     "*Recent transactions:* /recent\n"
     "*Lady's chosen category:* /lady\\_choice\n\n"
-    "Then send: `<merchant> <amount> [fcy]`\n"
+    "Or just send `<merchant> <amount> [fcy]` for a recommendation.\n"
     "e.g. `cold storage 45`  ·  `klook 320 fcy`\n\n"
-    "v2 enforces caps and min-spend. Tap 📝 after any recommendation to log.\n\n"
-    "⚠️ Best-effort recommendations based on Milelion-cited rules. Verify "
-    "against your statement. Statement-month caps use your set closing day "
-    "(or fall back to calendar month)."
+    "Statement-month caps use your set closing day (or fall back to calendar month).\n"
+    "_Rates are best-effort (Milelion). Verify against your statement._"
 )
 
 
@@ -140,8 +146,8 @@ def _render_tied(top: list[Recommendation]) -> str:
     lines = []
     tie_value = top[0].miles
     for r in top:
-        marker = "=" if r.miles == tie_value else "🥉"
-        lines.append(f"{marker} {_render_one(r)}")
+        medal = "🥈" if r.miles == tie_value else "🥉"
+        lines.append(f"{medal} {_render_one(r)}")
     return "\n".join(lines)
 
 
@@ -322,7 +328,7 @@ def format_log_confirmation(
     posting_warning: str | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Reply text + buttons after logging a transaction."""
-    lines = [f"📝 Logged: *{_md(card.name)}*"]
+    lines = [f"✨ Logged on *{_md(card.name)}*"]
     bonus_part = f" ({_md(txn.bonus_label)})" if txn.bonus_label else " (base rate)"
     fcy_part = " fcy" if txn.is_fcy else ""
     lines.append(
@@ -389,23 +395,31 @@ def format_pools(
             for b in card.bonus
         )
 
-        header = f"*{_md(card.name)}*"
+        # Card header
+        lines.append(f"*{_md(card.name)}*")
+
+        # Pool name on its own line
         if card.pool:
-            header += f"  _({_md(_pool_pretty(card.pool))})_"
+            lines.append(f"  💎 {_md(_pool_pretty(card.pool))}")
+
+        # Statement day warning
         if needs_statement and s_day is None:
-            header += "  ⚠ statement day not set"
+            lines.append("  ⚠ statement day not set")
             sday_buttons.append(
                 InlineKeyboardButton(
                     f"Set statement day — {card.name}",
                     callback_data=f"sday:{card.id}:prompt",
                 )
             )
-        lines.append(header)
 
         if not card.bonus:
             lines.append("  no bonus categories — base rate only")
             lines.append("")
             continue
+
+        # Period label once per card (from first bonus)
+        card_period = next((b.cap_period for b in card.bonus if b.cap_period), "calendar_month")
+        lines.append(f"  📅 {period_label(card_period, today, s_day)}")
 
         delay = _pd.get(card.id, card.posting_delay_days)
 
@@ -414,36 +428,37 @@ def format_pools(
             u = usage.get((card.id, idx))
             spend = u.spend_sgd if u is not None else 0.0
             min_used = u.min_spend_sgd if u is not None else 0.0
-            line_parts = [f"  {_md(label)}:"]
             cap_period = bonus.cap_period or "calendar_month"
-            cycle = period_label(cap_period, today, s_day)
-            if bonus.cap_sgd is not None:
-                pct = int(round(spend / bonus.cap_sgd * 100)) if bonus.cap_sgd else 0
-                if spend >= bonus.cap_sgd:
-                    line_parts.append(
-                        f"S${spend:g} / S${bonus.cap_sgd:g}  ⚠ cap reached"
-                    )
-                else:
-                    line_parts.append(
-                        f"S${spend:g} / S${bonus.cap_sgd:g}  ({pct}%)  •  {cycle}"
-                    )
-            else:
-                line_parts.append(f"S${spend:g} spent  •  no cap  •  {cycle}")
-            lines.append(" ".join(line_parts))
 
+            # Bullet + category label
+            lines.append(f"  · {_md(label)}")
+
+            if bonus.cap_sgd is None:
+                # No cap: compact single line
+                lines.append(f"    S${spend:g} spent  —  no cap")
+            else:
+                pct = int(round(spend / bonus.cap_sgd * 100)) if bonus.cap_sgd else 0
+                bar = _progress_bar(pct)
+                lines.append(f"    {bar}  {pct}%")
+                if spend >= bonus.cap_sgd:
+                    lines.append(f"    S${spend:g} / S${bonus.cap_sgd:g}  ⚠ cap reached")
+                else:
+                    lines.append(f"    S${spend:g} / S${bonus.cap_sgd:g}")
+
+            # Per-bonus period only if it differs from the card's dominant period
+            if cap_period != card_period:
+                lines.append(f"    {period_label(cap_period, today, s_day)}")
+
+            # Min-spend on its own line
             if bonus.min_spend_sgd is not None:
                 ms_period = bonus.min_spend_period or "calendar_month"
                 if min_used >= bonus.min_spend_sgd:
-                    lines.append(
-                        f"    ✓ min spend met (S${min_used:g} / S${bonus.min_spend_sgd:g})"
-                    )
+                    lines.append("    ✓ min spend met")
                 else:
                     gap = bonus.min_spend_sgd - min_used
                     n = days_left(ms_period, today, s_day)
                     day_word = "day" if n == 1 else "days"
-                    lines.append(
-                        f"    ⚠ S${gap:g} from min spend, {n} {day_word} left"
-                    )
+                    lines.append(f"    ⚠ S${gap:g} from min spend · {n} {day_word} left")
 
             # v3 nudge: warn when near end of bonus cap period.
             if (
@@ -484,6 +499,11 @@ def format_pools(
     return "\n".join(lines).rstrip(), kb
 
 
+def _progress_bar(pct: int, width: int = 16) -> str:
+    filled = round(pct / 100 * width)
+    return "█" * filled + "░" * (width - filled)
+
+
 def _pool_pretty(pool: str) -> str:
     return {
         "uob_unis": "UOB UNI$",
@@ -513,8 +533,9 @@ def format_recent(
             f"`{t.merchant} S${t.amount_sgd:g}{fcy}`  →  {t.miles_earned} mi"
         )
         lines.append(line)
+        label = t.merchant[:20] if len(t.merchant) > 20 else t.merchant
         rows.append([
-            InlineKeyboardButton(f"🗑 #{i}", callback_data=f"del:{t.tx_id}"),
+            InlineKeyboardButton(f"🗑 {label}", callback_data=f"del:{t.tx_id}"),
         ])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -726,12 +747,12 @@ async def handle_cards_command(
         cid = args[1].lower()
         if cid not in catalog:
             return (
-                f"Unknown card id `{cid}`.\n"
+                f"❌ Unknown card id `{cid}`.\n"
                 f"Valid: {', '.join(f'`{x}`' for x in sorted(catalog))}"
             )
         added = await storage.add_card(user_id, cid)
         if added:
-            return f"✅ Added *{catalog[cid].name}* to your wallet."
+            return f"✅ Added *{catalog[cid].name}* — welcome to the wallet!"
         return f"Already in your wallet: *{catalog[cid].name}*."
 
     if sub == "catalog":
@@ -744,7 +765,7 @@ async def handle_cards_command(
         removed = await storage.remove_card(user_id, cid)
         if removed:
             name = catalog[cid].name if cid in catalog else cid
-            return f"🗑️ Removed *{name}* from your wallet."
+            return f"🗑️ Removed *{name}*. Your wallet is updated."
         return f"`{cid}` wasn't in your wallet."
 
     return format_cards_help(catalog)
@@ -769,12 +790,12 @@ async def handle_log_command(
 
     card_id = args[0].lower()
     if card_id not in catalog:
-        return (f"Unknown card id `{card_id}`. Try /cards for valid ids.", None)
+        return (f"❌ Unknown card id `{card_id}`. Try /cards for valid ids.", None)
 
     owned = await storage.list_cards(user_id)
     if card_id not in owned:
         return (
-            f"`{card_id}` isn't in your wallet — add it first via /cards.",
+            f"❌ `{card_id}` isn't in your wallet — add it first via /cards.",
             None,
         )
 
@@ -783,9 +804,9 @@ async def handle_log_command(
     try:
         amount = float(args[2])
     except ValueError:
-        return (f"Invalid amount: `{args[2]}`. Use a number like 45 or 9.99.", None)
+        return (f"❌ Invalid amount: `{args[2]}`. Use a number like 45 or 9.99.", None)
     if amount <= 0:
-        return ("Amount must be greater than 0.", None)
+        return ("❌ Amount must be greater than 0.", None)
 
     is_fcy = False
     txn_date = today
@@ -797,7 +818,7 @@ async def handle_log_command(
             try:
                 txn_date = date.fromisoformat(e)
             except ValueError:
-                return (f"Couldn't parse `{extra}` — expected `fcy`/`sgd` or `yyyy-mm-dd`.", None)
+                return (f"❌ Couldn't parse `{extra}` — expected `fcy`/`sgd` or `yyyy-mm-dd`.", None)
 
     card = catalog[card_id]
     base_categories, same_day_merchant = _resolve_merchant(merchants, merchant)
@@ -909,7 +930,7 @@ async def handle_lady_choice_command(
     if args:
         category = args[0].lower()
         await storage.set_lady_choice(user_id, category, effective_from=today)
-        return (f"✅ Set Lady's category to `{category}` (effective {today.isoformat()}).", None)
+        return (f"✅ Set Lady's category to `{category}` — enjoy the bonus!", None)
     current = await storage.get_lady_choice(user_id, today=today)
     return format_lady_choice_keyboard(current)
 
@@ -923,7 +944,7 @@ async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> 
     if isinstance(update, Update) and update.effective_message:
         try:
             await update.effective_message.reply_text(
-                "⚠️ Something went wrong processing your request. Check the server logs."
+                "❌ Something went wrong — please try again."
             )
         except Exception:
             pass
@@ -932,6 +953,11 @@ async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> 
 async def _start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message:
         await update.message.reply_text(WELCOME, parse_mode="Markdown")
+
+
+async def _help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message:
+        await update.message.reply_text(HELP, parse_mode="Markdown")
 
 
 async def _cards(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1121,12 +1147,12 @@ async def _log(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         amount = float(args[1])
     except ValueError:
         await update.message.reply_text(
-            f"Invalid amount: `{_md(args[1])}`. Use a number like `45` or `9.99`.",
+            f"❌ Invalid amount: `{_md(args[1])}`. Use a number like `45` or `9.99`.",
             parse_mode="Markdown",
         )
         return
     if amount <= 0:
-        await update.message.reply_text("Amount must be greater than 0.", parse_mode="Markdown")
+        await update.message.reply_text("❌ Amount must be greater than 0.", parse_mode="Markdown")
         return
 
     is_fcy = any(a.lower() == "fcy" for a in args[2:])
@@ -1292,7 +1318,7 @@ async def _undo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     storage: Storage = context.application.bot_data["storage"]
     tx_id = query.data[len("undo:"):]
     deleted = await storage.delete_transaction(update.effective_user.id, tx_id)
-    msg = "↩ Undone." if deleted else "Already removed."
+    msg = "↩ Undone — transaction removed." if deleted else "Already removed."
     await query.edit_message_text(msg)
 
 
@@ -1381,7 +1407,7 @@ async def _sday_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.edit_message_text(f"⚠️ {e}")
         return
     await query.edit_message_text(
-        f"✅ *{_md(card.name)}* statement closing day set to {day}.",
+        f"✅ Got it — statement closes on day {day} for *{_md(card.name)}*.",
         parse_mode="Markdown",
     )
 
@@ -1396,7 +1422,7 @@ async def _lc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     today = date.today()
     await storage.set_lady_choice(update.effective_user.id, category, effective_from=today)
     await query.edit_message_text(
-        f"✅ Lady's category set to `{category}` (effective {today.isoformat()}).",
+        f"✅ Set Lady's category to `{category}` — enjoy the bonus!",
         parse_mode="Markdown",
     )
 
@@ -1466,7 +1492,7 @@ def build_application(
     app.bot_data["pending_logs"] = {}
     app.bot_data["pending_date_input"] = {}
     app.add_handler(CommandHandler("start", _start))
-    app.add_handler(CommandHandler("help", _start))
+    app.add_handler(CommandHandler("help", _help))
     app.add_handler(CommandHandler("cards", _cards))
     app.add_handler(CommandHandler("log", _log))
     app.add_handler(CommandHandler("pools", _pools))
