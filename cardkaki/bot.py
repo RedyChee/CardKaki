@@ -190,18 +190,41 @@ def format_wallet_keyboard(
 ) -> tuple[str, InlineKeyboardMarkup]:
     if not card_ids:
         text = "Your wallet is empty — tap *Browse & Add* to add cards."
+        rows: list[list[InlineKeyboardButton]] = []
     else:
-        lines = [f"Your wallet ({len(card_ids)} card{'s' if len(card_ids) != 1 else ''}):"]
-        for cid in card_ids:
-            c = catalog.get(cid)
-            lines.append(f"• {c.name if c else cid}")
-        text = "\n".join(lines)
+        text = f"Your wallet ({len(card_ids)} card{'s' if len(card_ids) != 1 else ''}):"
+        rows = [
+            [InlineKeyboardButton(catalog[cid].name if cid in catalog else cid, callback_data=f"ck:card:{cid}")]
+            for cid in card_ids
+        ]
 
-    rows = [[
+    rows.append([
         InlineKeyboardButton("🔍 Browse & Add", callback_data="ck:catalog"),
         InlineKeyboardButton("← Back", callback_data="ck:menu"),
-    ]]
+    ])
     return text, InlineKeyboardMarkup(rows)
+
+
+def format_card_detail_keyboard(
+    card: Card, statement_day: int | None
+) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [f"*{_md(card.name)}*"]
+    needs_statement = _card_uses_statement_period(card)
+    if needs_statement:
+        if statement_day is not None:
+            lines.append(f"Statement closing day: {statement_day}")
+        else:
+            lines.append("⚠ Statement closing day not set")
+
+    rows: list[list[InlineKeyboardButton]] = []
+    if needs_statement:
+        label = "📅 Change Statement Day" if statement_day is not None else "📅 Set Statement Day"
+        rows.append([InlineKeyboardButton(label, callback_data=f"sday:{card.id}:prompt")])
+    rows.append([
+        InlineKeyboardButton("🗑️ Remove Card", callback_data=f"ck:rm_detail:{card.id}"),
+        InlineKeyboardButton("← Back", callback_data="ck:wallet"),
+    ])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 def format_catalog_keyboard(
@@ -976,6 +999,18 @@ async def _cards_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await storage.remove_card(user_id, cid)
         owned = await storage.list_cards(user_id)
         text, kb = format_catalog_keyboard(catalog, owned)
+    elif data.startswith("ck:card:"):
+        cid = data[8:]
+        card = catalog.get(cid)
+        if card is None:
+            return
+        s_days = await storage.get_statement_days(user_id)
+        text, kb = format_card_detail_keyboard(card, s_days.get(cid))
+    elif data.startswith("ck:rm_detail:"):
+        cid = data[13:]
+        await storage.remove_card(user_id, cid)
+        owned = await storage.list_cards(user_id)
+        text, kb = format_wallet_keyboard(owned, catalog)
     else:
         return
 
@@ -1313,7 +1348,7 @@ async def _sday_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if action == "skip":
         await query.edit_message_text(
             f"Using calendar-month approximation for *{_md(card.name)}*. "
-            "You can change later via /pools.",
+            "You can change later via /cards.",
             parse_mode="Markdown",
         )
         return
