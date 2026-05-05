@@ -15,9 +15,7 @@ sheng_siong:     [groceries, contactless]
 giant:           [groceries, contactless]
 
 # --- online retail ---
-shopee:
-  categories: [online_shopping]
-  same_day_posting: true
+shopee:    [online_shopping]
 lazada:          [online_shopping]
 amazon:          [online_shopping]
 amazon_sg:       [online_shopping]

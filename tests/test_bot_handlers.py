@@ -624,9 +624,9 @@ async def test_compute_payload_no_warning_for_same_day_merchant(storage, catalog
     """same_day_posting merchants post on txn_date → no period crossing."""
     await storage.add_card(1, "hsbc_revo")
     await storage.set_posting_delay(1, "hsbc_revo", 1)
-    # shopee is same_day_posting=True → posting_date = txn_date = Apr 30 → same period
+    # grab is same_day_posting=True → posting_date = txn_date = Apr 30 → same period
     payload = await compute_recommendation_payload(
-        "shopee 45", 1, storage, catalog, merchants, today=date(2026, 4, 30)
+        "grab 45", 1, storage, catalog, merchants, today=date(2026, 4, 30)
     )
     revo = next(r for r in payload.recs if r.card_id == "hsbc_revo")
     assert revo.posting_warning is None

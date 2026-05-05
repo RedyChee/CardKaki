@@ -48,8 +48,8 @@ def test_merchants_yaml_loads():
 
 def test_merchants_same_day_posting_flag():
     merchants = load_merchants(DATA / "merchants.yaml")
-    assert merchants["shopee"].same_day_posting is True
     assert merchants["grab"].same_day_posting is True
     assert merchants["ntuc"].same_day_posting is True
+    assert merchants["shopee"].same_day_posting is False
     assert merchants["klook"].same_day_posting is False
     assert merchants["amazon"].same_day_posting is False
