@@ -189,6 +189,15 @@ class Storage:
             await db.commit()
         return tx_id
 
+    async def get_transaction(self, telegram_user_id: int, tx_id: str) -> TxnRow | None:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                f"SELECT {_TXN_COLS} FROM transactions WHERE tx_id = ? AND telegram_user_id = ?",
+                (tx_id, telegram_user_id),
+            )
+            row = await cur.fetchone()
+        return _row_to_txn(row) if row else None
+
     async def delete_transaction(self, telegram_user_id: int, tx_id: str) -> bool:
         """Returns True if a row was deleted; False if no such row for this user."""
         async with aiosqlite.connect(self.path) as db:
@@ -198,6 +207,31 @@ class Storage:
             )
             await db.commit()
             return cur.rowcount > 0
+
+    async def restore_transaction(self, txn: TxnRow) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("PRAGMA foreign_keys = ON")
+            await db.execute(
+                """
+                INSERT OR IGNORE INTO transactions
+                  (tx_id, telegram_user_id, card_id, bonus_idx, bonus_label,
+                   merchant, amount_sgd, is_fcy, miles_earned, txn_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    txn.tx_id,
+                    txn.telegram_user_id,
+                    txn.card_id,
+                    txn.bonus_idx,
+                    txn.bonus_label,
+                    txn.merchant,
+                    float(txn.amount_sgd),
+                    1 if txn.is_fcy else 0,
+                    int(txn.miles_earned),
+                    txn.txn_date.isoformat(),
+                ),
+            )
+            await db.commit()
 
     async def list_transactions_since(
         self, telegram_user_id: int, since: date

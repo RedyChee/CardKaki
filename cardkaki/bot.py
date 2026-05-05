@@ -1248,10 +1248,32 @@ async def _del_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     await query.answer()
     storage: Storage = context.application.bot_data["storage"]
-    catalog: dict[str, Card] = context.application.bot_data["cards"]
+    user_id = update.effective_user.id
     tx_id = query.data[len("del:"):]
-    await storage.delete_transaction(update.effective_user.id, tx_id)
-    text, kb = await handle_recent_command(update.effective_user.id, storage, catalog)
+    txn = await storage.get_transaction(user_id, tx_id)
+    await storage.delete_transaction(user_id, tx_id)
+    if txn:
+        context.user_data["pending_undo"] = txn
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("↩ Undo", callback_data=f"restore:{tx_id}")]])
+        await query.edit_message_text("🗑 Deleted.", reply_markup=kb)
+    else:
+        catalog: dict[str, Card] = context.application.bot_data["cards"]
+        text, kb = await handle_recent_command(user_id, storage, catalog)
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
+
+
+async def _restore_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not update.effective_user or not query.data:
+        return
+    await query.answer()
+    storage: Storage = context.application.bot_data["storage"]
+    catalog: dict[str, Card] = context.application.bot_data["cards"]
+    user_id = update.effective_user.id
+    txn = context.user_data.pop("pending_undo", None)
+    if txn:
+        await storage.restore_transaction(txn)
+    text, kb = await handle_recent_command(user_id, storage, catalog)
     await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
 
@@ -1402,6 +1424,7 @@ def build_application(
     app.add_handler(CallbackQueryHandler(_log_date_callback, pattern=r"^ldate:"))
     app.add_handler(CallbackQueryHandler(_undo_callback, pattern=r"^undo:"))
     app.add_handler(CallbackQueryHandler(_del_callback, pattern=r"^del:"))
+    app.add_handler(CallbackQueryHandler(_restore_callback, pattern=r"^restore:"))
     app.add_handler(CallbackQueryHandler(_pools_callback, pattern=r"^pools$"))
     app.add_handler(CallbackQueryHandler(_sday_callback, pattern=r"^sday:"))
     app.add_handler(CallbackQueryHandler(_lc_callback, pattern=r"^lc:"))
