@@ -93,12 +93,12 @@ def _apply_rounding(card: Card, amount_sgd: float) -> tuple[float, str | None]:
     if method == "floor_sgd_5":
         amt = float(floor(amount_sgd / 5) * 5)
         if amt < amount_sgd:
-            return amt, f"rounded S${amount_sgd:.2f} → S${int(amt)}"
+            return amt, f"rounded to S${int(amt)}"
         return amt, None
     if method == "floor_sgd_1":
         amt = float(floor(amount_sgd))
         if amt < amount_sgd:
-            return amt, f"rounded S${amount_sgd:.2f} → S${int(amt)}"
+            return amt, f"rounded to S${int(amt)}"
         return amt, None
     return amount_sgd, None
 

@@ -395,10 +395,12 @@ async def test_recent_command_with_delete_button(storage, catalog, merchants):
         ["hsbc_revo", "shopee", "50"], 1, storage, catalog, merchants
     )
     text, kb = await handle_recent_command(1, storage, catalog)
-    assert "shopee" in text
+    assert "Recent transactions" in text
     assert kb is not None
     all_btns = [b for row in kb.inline_keyboard for b in row]
-    assert any((b.callback_data or "") == "recent:edit" for b in all_btns)
+    assert any("shopee" in (b.text or "") for b in all_btns)
+    assert any((b.callback_data or "").startswith("del:") for b in all_btns)
+    assert any("🗑" in (b.text or "") for b in all_btns)
 
 
 # ---------------------------------------------------------------------------

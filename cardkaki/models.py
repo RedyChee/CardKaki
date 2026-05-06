@@ -35,6 +35,7 @@ class Card(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
     name: str
+    short_name: str | None = None
     descriptor: str = ""
     issuer: str
     network: Literal["visa", "mastercard", "amex"]

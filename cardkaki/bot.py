@@ -159,30 +159,26 @@ def format_recommendations(
     tie_miles = top[0].miles if (len(top) >= 2 and top[0].miles == top[1].miles and top[0].miles > 0) else None
     for i, r in enumerate(top):
         tie_note = "  _(tied)_" if tie_miles is not None and r.miles == tie_miles and i > 0 else ""
-        rendered_lines.append(f"{medals[i]} {_render_one(r)}{tie_note}")
-    # Surface secondary reasons (cap/min-spend warnings) on a continuation line.
-    for i, r in enumerate(top):
-        if len(r.reasons) > 1:
-            relevant = [
-                x for x in r.reasons[1:]
-                if x.startswith("⚠") or x.startswith("cap ")
-            ]
-            if relevant:
-                rendered_lines.append(f"   {' · '.join(_md(x) for x in relevant)}")
+        rendered_lines.append(f"{medals[i]} *{_md(r.card_name)}*: {r.effective_mpd:.1f} mpd{tie_note}")
+        # Primary reason on its own indented line(s)
+        reason = r.reasons[0] if r.reasons else ""
+        if not reason or reason == "generic spend":
+            rendered_lines.append("   — base rate")
+        else:
+            parts = _split_label_parts(reason)
+            for part in parts:
+                if part.startswith("✓") or part.startswith("⚠") or part.startswith("—"):
+                    rendered_lines.append(f"   {_md(part)}")
+                else:
+                    rendered_lines.append(f"   ✓ {_md(part)}")
+        # Secondary cap/posting warnings inline under the card
+        for extra in r.reasons[1:]:
+            if extra.startswith("⚠") or extra.startswith("cap "):
+                rendered_lines.append(f"   {_md(extra)}")
         if r.posting_warning:
             rendered_lines.append(f"   ⚠ {_md(r.posting_warning)}")
 
     return "\n".join(header_bits + rendered_lines)
-
-
-def _render_one(r: Recommendation) -> str:
-    head = f"*{_md(r.card_name)}*: {r.effective_mpd:.1f} mpd"
-    reason = r.reasons[0] if r.reasons else ""
-    if not reason or reason == "generic spend":
-        reason = "— base rate"
-    elif not reason.startswith("✓") and not reason.startswith("⚠") and not reason.startswith("—"):
-        reason = f"✓ {reason}"
-    return f"{head}  {_md(reason)}".rstrip()
 
 
 def format_card_list(card_ids: list[str], catalog: dict[str, Card]) -> str:
@@ -402,6 +398,9 @@ def format_log_confirmation(
     return "\n".join(lines), kb
 
 
+_DASH_SEP = "- - - - - - - - - - - - - -"
+
+
 def format_pools(
     owned_cards: list[Card],
     usage: dict[tuple[str, int], object],
@@ -409,6 +408,7 @@ def format_pools(
     today: date,
     posting_delays: dict[str, int] | None = None,
     same_day_merchants: set[str] | None = None,
+    lady_choice: str | None = None,
 ) -> tuple[str, InlineKeyboardMarkup | None]:
     """Per-card cap progress for /pools."""
     if not owned_cards:
@@ -430,14 +430,8 @@ def format_pools(
             for b in card.bonus
         )
 
-        # Card header
         lines.append(f"*{_md(card.name)}*")
 
-        # Pool name on its own line
-        if card.pool:
-            lines.append(f"  💎 {_md(_pool_pretty(card.pool))}")
-
-        # Statement day warning
         if needs_statement and s_day is None:
             lines.append("  ⚠ statement day not set")
             sday_buttons.append(
@@ -452,51 +446,59 @@ def format_pools(
             lines.append("")
             continue
 
-        # Period label once per card (from first bonus)
         card_period = next((b.cap_period for b in card.bonus if b.cap_period), "calendar_month")
-        lines.append(f"  📅 {period_label(card_period, today, s_day)}")
-
         delay = _pd.get(card.id, card.posting_delay_days)
+        single_bonus = len(card.bonus) == 1
 
         for idx, bonus in enumerate(card.bonus):
-            label = bonus.label or "bonus"
+            raw_label = bonus.label or "bonus"
+            label = (
+                lady_choice.capitalize()
+                if card.id == "uob_lady" and raw_label == "chosen category" and lady_choice
+                else raw_label
+            )
             u = usage.get((card.id, idx))
             spend = u.spend_sgd if u is not None else 0.0
             min_used = u.min_spend_sgd if u is not None else 0.0
             cap_period = bonus.cap_period or "calendar_month"
 
-            # Bullet + category label
-            lines.append(f"  · {_md(label)}")
-
-            if bonus.cap_sgd is None:
-                # No cap: compact single line
-                miles_so_far = round(spend * bonus.rate_mpd)
-                lines.append(f"    S${spend:g} spent  →  {miles_so_far:,} mi  —  no cap")
-            else:
-                pct = int(round(spend / bonus.cap_sgd * 100)) if bonus.cap_sgd else 0
+            if bonus.cap_sgd is not None:
+                pct = int(round(spend / bonus.cap_sgd * 100))
                 bar = _progress_bar(pct)
                 miles_so_far = round(spend * bonus.rate_mpd)
-                if spend >= bonus.cap_sgd:
-                    lines.append(f"    {bar}  S${spend:g} / S${bonus.cap_sgd:g}  →  {miles_so_far:,} mi  ⚠ cap reached")
-                else:
-                    lines.append(f"    {bar}  S${spend:g} / S${bonus.cap_sgd:g}  →  {miles_so_far:,} mi")
+                cap_suffix = "  ⚠ cap reached" if spend >= bonus.cap_sgd else ""
 
-            # Per-bonus period only if it differs from the card's dominant period
-            if cap_period != card_period:
-                lines.append(f"    {period_label(cap_period, today, s_day)}")
+                lines.append(_DASH_SEP)
+                lines.append(bar)
+                lines.append(f"S${spend:g} / S${bonus.cap_sgd:g}  →  {miles_so_far:,} mi{cap_suffix}")
+                lines.append(_DASH_SEP)
+            else:
+                miles_so_far = round(spend * bonus.rate_mpd)
+                lines.append(f"  S${spend:g} spent  →  {miles_so_far:,} mi  —  no cap")
 
-            # Min-spend on its own line
+            # Pool + period: after box for single-bonus cards, before first box for multi
+            if single_bonus or idx == len(card.bonus) - 1:
+                if card.pool:
+                    lines.append(f"  💎 {_md(_pool_pretty(card.pool))}")
+                lines.append(f"  📅 {period_label(card_period, today, s_day)}")
+                if cap_period != card_period:
+                    lines.append(f"  📅 {period_label(cap_period, today, s_day)}")
+
+            # Categories as point-form bullets
+            for part in _split_label_parts(label):
+                lines.append(f"  · {_md(part)}")
+
+            # Min-spend
             if bonus.min_spend_sgd is not None:
                 ms_period = bonus.min_spend_period or "calendar_month"
                 if min_used >= bonus.min_spend_sgd:
-                    lines.append("    ✓ min spend met")
+                    lines.append("  ✓ min spend met")
                 else:
                     gap = bonus.min_spend_sgd - min_used
                     n = days_left(ms_period, today, s_day)
                     day_word = "day" if n == 1 else "days"
-                    lines.append(f"    ⚠ S${gap:g} from min spend · {n} {day_word} left")
+                    lines.append(f"  ⚠ S${gap:g} from min spend · {n} {day_word} left")
 
-            # v3 nudge: warn when near end of bonus cap period.
             if (
                 card.tracks_by == "posting_date"
                 and posting_delays is not None
@@ -530,14 +532,39 @@ def format_pools(
 
     kb = None
     if sday_buttons:
-        # one button per row for legibility
         kb = InlineKeyboardMarkup([[b] for b in sday_buttons])
     return "\n".join(lines).rstrip(), kb
 
 
-def _progress_bar(pct: int, width: int = 10) -> str:
+def _progress_bar(pct: int, width: int = 14) -> str:
     filled = round(pct / 100 * width)
     return "█" * filled + "░" * (width - filled)
+
+
+def _split_label_parts(label: str) -> list[str]:
+    """Split 'a + b/c + d (note)' into individual point-form lines."""
+    parts = [p.strip() for p in label.split(' + ')]
+    result = []
+    for part in parts:
+        depth = 0
+        slash_pos: list[int] = []
+        for i, c in enumerate(part):
+            if c == '(':
+                depth += 1
+            elif c == ')':
+                depth -= 1
+            elif c == '/' and depth == 0:
+                slash_pos.append(i)
+        if slash_pos:
+            pieces, prev = [], 0
+            for pos in slash_pos:
+                pieces.append(part[prev:pos].strip())
+                prev = pos + 1
+            pieces.append(part[prev:].strip())
+            result.extend(p for p in pieces if p)
+        else:
+            result.append(part)
+    return result
 
 
 def _pool_pretty(pool: str) -> str:
@@ -553,31 +580,23 @@ def _pool_pretty(pool: str) -> str:
 
 
 def format_recent(
-    txns: list[TxnRow], catalog: dict[str, Card], *, edit_mode: bool = False
+    txns: list[TxnRow], catalog: dict[str, Card],
 ) -> tuple[str, InlineKeyboardMarkup | None]:
     if not txns:
         return ("🧾 No transactions logged yet.\nLog with /log or tap 📝 after a recommendation.", None)
 
-    lines = ["🧾 *Recent transactions*", ""]
     rows: list[list[InlineKeyboardButton]] = []
-    for i, t in enumerate(txns, start=1):
+    for t in txns:
         c = catalog.get(t.card_id)
-        cname = c.name if c else t.card_id
+        short = (c.short_name or c.name) if c else t.card_id
         fcy = " fcy" if t.is_fcy else ""
-        line = (
-            f"{i}. {t.txn_date.strftime('%b %d')}  *{_md(cname)}*  "
-            f"`{t.merchant} S${t.amount_sgd:g}{fcy}`  →  {t.miles_earned} mi"
+        label = (
+            f"{t.txn_date.strftime('%b %d')}  {short}  "
+            f"{t.merchant} S${t.amount_sgd:g}{fcy}  →  {t.miles_earned} mi  🗑"
         )
-        lines.append(line)
-        if edit_mode:
-            rows.append([InlineKeyboardButton("🗑", callback_data=f"del_edit:{t.tx_id}")])
+        rows.append([InlineKeyboardButton(label, callback_data=f"del:{t.tx_id}")])
 
-    if edit_mode:
-        rows.append([InlineKeyboardButton("← Done", callback_data="recent:done")])
-    else:
-        rows.append([InlineKeyboardButton("✏️ Edit", callback_data="recent:edit")])
-
-    return "\n".join(lines), InlineKeyboardMarkup(rows)
+    return "🧾 *Recent transactions*", InlineKeyboardMarkup(rows)
 
 
 def format_statement_day_prompt(card: Card) -> tuple[str, InlineKeyboardMarkup]:
@@ -635,7 +654,10 @@ def format_lady_choice_keyboard(
     rows = []
     for i in range(0, len(options), 2):
         rows.append([
-            InlineKeyboardButton(label, callback_data=f"lc:{cat}")
+            InlineKeyboardButton(
+                f"✓ {label}" if current == cat else label,
+                callback_data=f"lc:{cat}",
+            )
             for label, cat in options[i : i + 2]
         ])
     return text, InlineKeyboardMarkup(rows)
@@ -948,7 +970,8 @@ async def handle_pools_command(
         {k for k, v in merchants.items() if v.same_day_posting}
         if merchants else None
     )
-    return format_pools(owned_cards, usage, statement_days, today, posting_delays or None, same_day)
+    lady_choice = await storage.get_lady_choice(user_id, today=today)
+    return format_pools(owned_cards, usage, statement_days, today, posting_delays or None, same_day, lady_choice)
 
 
 async def handle_recent_command(
@@ -1396,65 +1419,6 @@ async def _del_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
 
-async def _del_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    if not query or not update.effective_user or not query.data:
-        return
-    await query.answer()
-    storage: Storage = context.application.bot_data["storage"]
-    catalog: dict[str, Card] = context.application.bot_data["cards"]
-    user_id = update.effective_user.id
-    tx_id = query.data[len("del_edit:"):]
-    txn = await storage.get_transaction(user_id, tx_id)
-    await storage.delete_transaction(user_id, tx_id)
-    if txn:
-        context.user_data["pending_undo"] = txn
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("↩ Undo", callback_data=f"restore_edit:{tx_id}")]])
-        await query.edit_message_text("🗑 Deleted.", reply_markup=kb)
-    else:
-        txns = await storage.recent_transactions(user_id)
-        text, kb = format_recent(txns, catalog, edit_mode=True)
-        await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
-
-
-async def _restore_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    if not query or not update.effective_user or not query.data:
-        return
-    await query.answer()
-    storage: Storage = context.application.bot_data["storage"]
-    catalog: dict[str, Card] = context.application.bot_data["cards"]
-    user_id = update.effective_user.id
-    txn = context.user_data.pop("pending_undo", None)
-    if txn:
-        await storage.restore_transaction(txn)
-    txns = await storage.recent_transactions(user_id)
-    text, kb = format_recent(txns, catalog, edit_mode=True)
-    await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
-
-
-async def _recent_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    if not query or not update.effective_user:
-        return
-    await query.answer()
-    storage: Storage = context.application.bot_data["storage"]
-    catalog: dict[str, Card] = context.application.bot_data["cards"]
-    txns = await storage.recent_transactions(update.effective_user.id)
-    text, kb = format_recent(txns, catalog, edit_mode=True)
-    await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
-
-
-async def _recent_done_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    if not query or not update.effective_user:
-        return
-    await query.answer()
-    storage: Storage = context.application.bot_data["storage"]
-    catalog: dict[str, Card] = context.application.bot_data["cards"]
-    txns = await storage.recent_transactions(update.effective_user.id)
-    text, kb = format_recent(txns, catalog, edit_mode=False)
-    await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
 
 async def _restore_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1620,11 +1584,7 @@ def build_application(
     app.add_handler(CallbackQueryHandler(_log_date_callback, pattern=r"^ldate:"))
     app.add_handler(CallbackQueryHandler(_undo_callback, pattern=r"^undo:"))
     app.add_handler(CallbackQueryHandler(_del_callback, pattern=r"^del:"))
-    app.add_handler(CallbackQueryHandler(_del_edit_callback, pattern=r"^del_edit:"))
     app.add_handler(CallbackQueryHandler(_restore_callback, pattern=r"^restore:"))
-    app.add_handler(CallbackQueryHandler(_restore_edit_callback, pattern=r"^restore_edit:"))
-    app.add_handler(CallbackQueryHandler(_recent_edit_callback, pattern=r"^recent:edit$"))
-    app.add_handler(CallbackQueryHandler(_recent_done_callback, pattern=r"^recent:done$"))
     app.add_handler(CallbackQueryHandler(_help_toggle_callback, pattern=r"^help:"))
     app.add_handler(CallbackQueryHandler(_pools_callback, pattern=r"^pools$"))
     app.add_handler(CallbackQueryHandler(_sday_callback, pattern=r"^sday:"))
