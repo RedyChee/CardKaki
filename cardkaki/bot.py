@@ -428,7 +428,7 @@ def format_pools(
 
     for card in owned_cards:
         if card.pool:
-            pool_groups.setdefault(card.pool, []).append(card.name)
+            pool_groups.setdefault(card.pool, []).append(card.short_name or card.name)
         s_day = statement_days.get(card.id)
         needs_statement = any(
             (b.cap_period or "").startswith("statement")
