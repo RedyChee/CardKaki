@@ -36,7 +36,7 @@
 
 - id: uob_ppv
   name: UOB Preferred Platinum Visa
-  short_name: UOB Plat Visa
+  short_name: UOB PPV
   descriptor: mobile pay & online
   issuer: uob
   network: visa
@@ -68,7 +68,7 @@
 
 - id: uob_vs
   name: UOB Visa Signature
-  short_name: UOB Visa Sig
+  short_name: UOB Visa Signature
   descriptor: overseas & contactless
   issuer: uob
   network: visa
@@ -287,7 +287,7 @@
       applies_to_sgd: true
       applies_to_fcy: true
     - rate_mpd: 2.0
-      label: Grab Singapore (first S$200/cal-mo)
+      label: Grab (first S$200)
       categories: [grab]
       excluded_categories:
         [public_transit_excluded, petrol_amex_excluded, wallet_topup,

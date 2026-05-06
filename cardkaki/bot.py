@@ -436,7 +436,7 @@ def format_pools(
             for b in card.bonus
         )
 
-        lines.append(f"*{_md(card.name)}* ♾ {card.base_rate_mpd:g} mpd")
+        lines.append(f"*{_md(card.short_name or card.name)}* ♾ {card.base_rate_mpd:g} mpd")
 
         if needs_statement and s_day is None:
             lines.append("  ⚠ statement day not set")
@@ -546,7 +546,7 @@ def format_pools(
     return "\n".join(lines).rstrip(), kb
 
 
-def _progress_bar(pct: int, width: int = 14) -> str:
+def _progress_bar(pct: int, width: int = 9) -> str:
     filled = round(pct / 100 * width)
     return "█" * filled + "░" * (width - filled)
 

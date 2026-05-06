@@ -357,7 +357,7 @@ async def test_pools_command_renders_each_owned_card(storage, catalog):
     await storage.add_card(1, "uob_ppv")
     text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
     assert "HSBC Revolution" in text
-    assert "UOB Preferred Platinum Visa" in text
+    assert "UOB PPV" in text
 
 
 async def test_pools_warns_when_statement_day_missing(storage, catalog):
