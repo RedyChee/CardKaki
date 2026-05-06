@@ -491,7 +491,7 @@ def format_pools(
                     gap = bonus.min_spend_sgd - min_used
                     n = days_left(ms_period, today, s_day)
                     day_word = "day" if n == 1 else "days"
-                    min_spend_lines.append(f"  ⚠ S${gap:g} from min spend · {n} {day_word} left")
+                    min_spend_lines.append(f"  ⚠ S${gap:g} min · {n} {day_word} left")
 
             if (
                 card.tracks_by == "posting_date"
@@ -527,6 +527,8 @@ def format_pools(
 
         lines.append(f"  Total: S${card_total_spend:g} →  {card_total_miles:,} mi")
         lines.extend(min_spend_lines)
+        if card.pool_note:
+            lines.append(f"  ⚠ {_md(card.pool_note)}")
         lines.append("")
 
     if nudge_lines:

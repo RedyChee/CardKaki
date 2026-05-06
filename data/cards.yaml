@@ -117,7 +117,7 @@
   rounding: { method: floor_sgd_5, unis_per_block: 3.5 }
   bonus:
     - rate_mpd: 8.0
-      label: Agoda hotels (special landing page)
+      label: Agoda hotel
       categories: [agoda]
       excluded_categories:
         [charity_excluded, education_excluded, govt_excluded, hospital_excluded,
@@ -125,8 +125,16 @@
       applies_to_sgd: true
       applies_to_fcy: true
     - rate_mpd: 8.0
-      label: Expedia hotels/activities/cars
+      label: Expedia hotel + Expedia activities + Expedia car rental
       categories: [expedia]
+      excluded_categories:
+        [charity_excluded, education_excluded, govt_excluded, hospital_excluded,
+         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: true
+    - rate_mpd: 3.0
+      label: Expedia flight
+      categories: [expedia_flight]
       excluded_categories:
         [charity_excluded, education_excluded, govt_excluded, hospital_excluded,
          insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
@@ -137,6 +145,7 @@
   posting_delay_days: 2
   anniversary_year: false
   fcy_fee: 0.0325
+  pool_note: "Special Agoda & Expedia landing page"
   notes: "No cap. SE-Asian currency boost (3.0 FCY for IDR/MYR/THB/VND) not modeled in v1. Min S$5/txn. Source: milelion.com/2026/02/04/review-uob-prvi-miles-card"
 
 - id: uob_lady

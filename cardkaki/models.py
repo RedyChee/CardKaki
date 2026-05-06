@@ -50,6 +50,7 @@ class Card(BaseModel):
     anniversary_year: bool = False
     fcy_fee: float = 0.0325
     notes: str | None = None
+    pool_note: str | None = None
 
 
 class ParsedInput(BaseModel):
