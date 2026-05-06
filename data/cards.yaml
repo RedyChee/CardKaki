@@ -306,7 +306,7 @@
 
 - id: maybank_xl
   name: Maybank XL Rewards
-  short_name: Maybank XL
+  short_name: Maybank XL Rewards
   descriptor: dining & travel
   issuer: maybank
   network: visa
@@ -315,7 +315,7 @@
   rounding: { method: floor_sgd_5 }
   bonus:
     - rate_mpd: 4.0
-      label: dining + shopping + travel + entertainment (S$500/mo min spend)
+      label: dining + shopping + travel + entertainment
       categories:
         [dining_local, dining_delivery, shopping, dept_store, travel, online_travel,
          airline, entertainment]
