@@ -174,8 +174,9 @@ def format_recommendations(
                 rendered_lines.append(f"   {_md(extra)}")
         if r.posting_warning:
             rendered_lines.append(f"   ⚠ {_md(r.posting_warning)}")
+        rendered_lines.append("")
 
-    return "\n".join(header_bits + rendered_lines)
+    return "\n".join(header_bits + rendered_lines).rstrip()
 
 
 def format_card_list(card_ids: list[str], catalog: dict[str, Card]) -> str:

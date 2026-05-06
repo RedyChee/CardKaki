@@ -179,6 +179,18 @@ def test_format_recs_single():
     assert "4.0 mpd" in out
 
 
+def test_format_recs_blank_line_between_cards():
+    """Each card block is separated by a blank line."""
+    a = Recommendation(card_id="a", card_name="Card A", miles=200, effective_mpd=4.0, reasons=["✓ online"])
+    b = Recommendation(card_id="b", card_name="Card B", miles=180, effective_mpd=3.9, reasons=["✓ contactless"])
+    out = format_recommendations([a, b], merchant="shopee", amount_sgd=50, is_fcy=False)
+    lines = out.splitlines()
+    gold_idx = next(i for i, ln in enumerate(lines) if "🥇" in ln)
+    silver_idx = next(i for i, ln in enumerate(lines) if "🥈" in ln)
+    assert silver_idx - gold_idx >= 3, "expect blank line between card blocks"
+    assert any(ln.strip() == "" for ln in lines[gold_idx:silver_idx]), "blank line missing between cards"
+
+
 def test_format_recs_tie_uses_silver_medal():
     a = Recommendation(card_id="a", card_name="Card A", miles=200, effective_mpd=4.0)
     b = Recommendation(card_id="b", card_name="Card B", miles=200, effective_mpd=4.0)
