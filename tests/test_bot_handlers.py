@@ -599,6 +599,102 @@ async def test_pools_no_nudge_when_not_near_end(storage, catalog):
 
 
 # ---------------------------------------------------------------------------
+# v4: /pools new layout — base rate header, ✅ categories, Total line
+# ---------------------------------------------------------------------------
+
+
+async def test_pools_card_header_shows_base_rate(storage, catalog):
+    """Card header includes ♾ and base mpd rate."""
+    await storage.add_card(1, "hsbc_revo")
+    text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
+    assert "♾" in text
+    assert "mpd" in text
+
+
+async def test_pools_categories_use_checkmark_and_star(storage, catalog):
+    """Bonus categories shown as ✅ category ⭐ rate mpd."""
+    await storage.add_card(1, "hsbc_revo")
+    text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
+    assert "✅" in text
+    assert "⭐" in text
+
+
+async def test_pools_header_has_grand_total(storage, catalog):
+    """Header line shows 🎉 Total: X mi."""
+    await storage.add_card(1, "hsbc_revo")
+    text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
+    assert "🎉 Total:" in text
+
+
+async def test_pools_card_has_total_line(storage, catalog):
+    """Each card section ends with a Total: spend → miles line."""
+    await storage.add_card(1, "hsbc_revo")
+    text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
+    assert "Total:" in text
+
+
+async def test_pools_no_dotted_line_separators(storage, catalog):
+    """Output contains no dotted-line separators."""
+    await storage.add_card(1, "hsbc_revo")
+    text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
+    assert "- - -" not in text
+
+
+async def test_pools_bar_and_spend_on_same_line(storage, catalog, merchants):
+    """Progress bar and S$X / S$cap appear on the same line."""
+    await storage.add_card(1, "uob_ppv")
+    await handle_log_command(
+        ["uob_ppv", "shopee", "100"], 1, storage, catalog, merchants,
+        today=date(2026, 5, 4),
+    )
+    text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
+    bar_lines = [ln for ln in text.splitlines() if ("░" in ln or "█" in ln)]
+    assert bar_lines, "expected at least one progress bar line"
+    assert any("S$" in ln for ln in bar_lines), "bar and spend should be on same line"
+
+
+async def test_pools_bars_appear_after_all_categories(storage, catalog):
+    """All ✅ category lines come before any progress bar lines per card."""
+    await storage.add_card(1, "uob_ppv")
+    text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
+    lines = text.splitlines()
+    cat_indices = [i for i, ln in enumerate(lines) if "✅" in ln]
+    bar_indices = [i for i, ln in enumerate(lines) if "░" in ln or "█" in ln]
+    assert cat_indices and bar_indices
+    assert max(cat_indices) < min(bar_indices), "bars should come after all categories"
+
+
+async def test_pools_grand_total_reflects_logged_txn(storage, catalog, merchants):
+    """Grand total updates after logging a transaction."""
+    await storage.add_card(1, "hsbc_revo")
+    await handle_log_command(
+        ["hsbc_revo", "cold_storage", "100"], 1, storage, catalog, merchants,
+        today=date(2026, 5, 4),
+    )
+    text, _ = await handle_pools_command(1, storage, catalog, today=date(2026, 5, 4))
+    # HSBC Revo earns 4 mpd on contactless; 100 * 4 = 400 mi
+    assert "400" in text
+
+
+# ---------------------------------------------------------------------------
+# v4: format_recommendations — no merchant echo
+# ---------------------------------------------------------------------------
+
+
+def test_format_recs_no_merchant_echo():
+    """Output does not echo back the merchant/amount as a header line."""
+    rec = Recommendation(
+        card_id="hsbc_revo", card_name="HSBC Revolution",
+        miles=288, effective_mpd=4.0, reasons=["✓ online or contactless"],
+    )
+    out = format_recommendations(
+        [rec], merchant="shopee", amount_sgd=72, is_fcy=False
+    )
+    assert "`shopee" not in out
+    assert "shopee 72" not in out
+
+
+# ---------------------------------------------------------------------------
 # v3: compute_recommendation_payload uses posting delays
 # ---------------------------------------------------------------------------
 

@@ -150,9 +150,6 @@ def format_recommendations(
     if is_fcy:
         header_bits.append(f"💱 FCY — fee adds ~3.25% to your cost.")
 
-    fcy_str = " fcy" if is_fcy else ""
-    header_bits.append(f"`{merchant} {amount_sgd:g}{fcy_str}`")
-
     top = recs[:5]
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
     rendered_lines: list[str] = []
@@ -398,9 +395,6 @@ def format_log_confirmation(
     return "\n".join(lines), kb
 
 
-_DASH_SEP = "- - - - - - - - - - - - - -"
-
-
 def format_pools(
     owned_cards: list[Card],
     usage: dict[tuple[str, int], object],
@@ -414,7 +408,18 @@ def format_pools(
     if not owned_cards:
         return ("Your wallet is empty — add cards first via /cards.", None)
 
-    lines = [f"📊 *Your caps* — {today.strftime('%b %Y')}", ""]
+    grand_total = 0
+    for card in owned_cards:
+        for idx, bonus in enumerate(card.bonus):
+            u = usage.get((card.id, idx))
+            spend = u.spend_sgd if u is not None else 0.0
+            grand_total += round(spend * bonus.rate_mpd)
+
+    lines = [
+        f"📊 *Your caps* — {today.strftime('%b %Y')}",
+        f"🎉 Total: {grand_total:,} mi",
+        "",
+    ]
     sday_buttons: list[InlineKeyboardButton] = []
     pool_groups: dict[str, list[str]] = {}
     nudge_lines: list[str] = []
@@ -430,7 +435,7 @@ def format_pools(
             for b in card.bonus
         )
 
-        lines.append(f"*{_md(card.name)}*")
+        lines.append(f"*{_md(card.name)}* ♾ {card.base_rate_mpd:g} mpd")
 
         if needs_statement and s_day is None:
             lines.append("  ⚠ statement day not set")
@@ -448,8 +453,18 @@ def format_pools(
 
         card_period = next((b.cap_period for b in card.bonus if b.cap_period), "calendar_month")
         delay = _pd.get(card.id, card.posting_delay_days)
-        single_bonus = len(card.bonus) == 1
+        num_caps = sum(1 for b in card.bonus if b.cap_sgd is not None)
 
+        if card.pool:
+            lines.append(f"  💎 {_md(_pool_pretty(card.pool))}")
+        lines.append(f"  📅 {period_label(card_period, today, s_day)}")
+
+        card_total_miles = 0
+        card_total_spend = 0.0
+        min_spend_lines: list[str] = []
+
+        # Precompute per-bonus data for two-pass rendering
+        bonus_rows: list[tuple] = []  # (bonus, label, spend, min_used, cap_period, miles)
         for idx, bonus in enumerate(card.bonus):
             raw_label = bonus.label or "bonus"
             label = (
@@ -461,43 +476,21 @@ def format_pools(
             spend = u.spend_sgd if u is not None else 0.0
             min_used = u.min_spend_sgd if u is not None else 0.0
             cap_period = bonus.cap_period or "calendar_month"
+            miles_so_far = round(spend * bonus.rate_mpd)
 
-            if bonus.cap_sgd is not None:
-                pct = int(round(spend / bonus.cap_sgd * 100))
-                bar = _progress_bar(pct)
-                miles_so_far = round(spend * bonus.rate_mpd)
-                cap_suffix = "  ⚠ cap reached" if spend >= bonus.cap_sgd else ""
+            card_total_miles += miles_so_far
+            card_total_spend += spend
+            bonus_rows.append((bonus, label, spend, min_used, cap_period, miles_so_far))
 
-                lines.append(_DASH_SEP)
-                lines.append(bar)
-                lines.append(f"S${spend:g} / S${bonus.cap_sgd:g}  →  {miles_so_far:,} mi{cap_suffix}")
-                lines.append(_DASH_SEP)
-            else:
-                miles_so_far = round(spend * bonus.rate_mpd)
-                lines.append(f"  S${spend:g} spent  →  {miles_so_far:,} mi  —  no cap")
-
-            # Pool + period: after box for single-bonus cards, before first box for multi
-            if single_bonus or idx == len(card.bonus) - 1:
-                if card.pool:
-                    lines.append(f"  💎 {_md(_pool_pretty(card.pool))}")
-                lines.append(f"  📅 {period_label(card_period, today, s_day)}")
-                if cap_period != card_period:
-                    lines.append(f"  📅 {period_label(cap_period, today, s_day)}")
-
-            # Categories as point-form bullets
-            for part in _split_label_parts(label):
-                lines.append(f"  · {_md(part)}")
-
-            # Min-spend
             if bonus.min_spend_sgd is not None:
                 ms_period = bonus.min_spend_period or "calendar_month"
                 if min_used >= bonus.min_spend_sgd:
-                    lines.append("  ✓ min spend met")
+                    min_spend_lines.append("  ✓ min spend met")
                 else:
                     gap = bonus.min_spend_sgd - min_used
                     n = days_left(ms_period, today, s_day)
                     day_word = "day" if n == 1 else "days"
-                    lines.append(f"  ⚠ S${gap:g} from min spend · {n} {day_word} left")
+                    min_spend_lines.append(f"  ⚠ S${gap:g} from min spend · {n} {day_word} left")
 
             if (
                 card.tracks_by == "posting_date"
@@ -517,6 +510,22 @@ def format_pools(
                         nudge += f" — same-day posters: {names}"
                     nudge_lines.append(nudge)
 
+        # Pass 1: all categories
+        for bonus, label, spend, min_used, cap_period, miles_so_far in bonus_rows:
+            for part in _split_label_parts(label):
+                lines.append(f"  ✅ {_md(part)} ⭐ {bonus.rate_mpd:g} mpd")
+
+        # Pass 2: all progress bars (capped blocks only)
+        for bonus, label, spend, min_used, cap_period, miles_so_far in bonus_rows:
+            if bonus.cap_sgd is not None:
+                pct = int(round(spend / bonus.cap_sgd * 100))
+                bar = _progress_bar(pct)
+                cap_suffix = "  ⚠ cap reached" if spend >= bonus.cap_sgd else ""
+                cap_label = f"  ({_first_label_part(label)})" if num_caps > 1 else ""
+                lines.append(f"  {bar}  S${spend:g} / S${bonus.cap_sgd:g}{cap_label}{cap_suffix}")
+
+        lines.append(f"  Total: S${card_total_spend:g} →  {card_total_miles:,} mi")
+        lines.extend(min_spend_lines)
         lines.append("")
 
     if nudge_lines:
@@ -565,6 +574,15 @@ def _split_label_parts(label: str) -> list[str]:
         else:
             result.append(part)
     return result
+
+
+def _first_label_part(label: str) -> str:
+    """Return first segment of a label, stripping parenthetical notes."""
+    first = label.split(" + ")[0].strip()
+    paren_idx = first.find("(")
+    if paren_idx > 0:
+        first = first[:paren_idx].strip()
+    return first.split("/")[0].strip()
 
 
 def _pool_pretty(pool: str) -> str:
