@@ -95,7 +95,7 @@ Boring on purpose.
 - **SQLite** — the long-term answer for this project, not a stepping stone. Single-writer (the bot process), human-scale write rates, one server. SQLite handles this forever.
 - **pytest** — the rule engine MUST be ruthlessly tested
 - **Railway** — push-to-deploy, managed Postgres-style ergonomics for SQLite-on-volume, ~$5/month minimum. Trades cost for simplicity; the right call when you'd rather build features than wrangle infra.
-- **Optional v1.5+:** Anthropic API (Claude Haiku) for parsing
+- **Optional v1.5+:** Gemini API (Gemma 4 31B) for LLM input parsing — set `GEMINI_API_KEY` to enable
 - **Optional v4:** any vector DB (Chroma local is fine), Claude/GPT for `/ask`
 
 ## Things I will *not* build (and why)

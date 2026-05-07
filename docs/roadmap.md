@@ -21,11 +21,10 @@ The smallest thing that's already useful. No state, no caps, no logging.
 
 If friends keep typo-ing, add an LLM input parser as a thin shell:
 
-- [ ] Haiku / gpt-4o-mini call with tight JSON schema
-- [ ] Falls back to regex parser on LLM failure
-- [ ] LLM **only** produces structured input; never decides cards
-
-Skip if the strict format works for users.
+- [x] Gemma 4 31B via Gemini API with tight JSON schema (`response_schema`)
+- [x] Falls back to regex parser on LLM failure; auto-disabled when `GEMINI_API_KEY` is absent
+- [x] LLM **only** produces structured input; never decides cards
+- [x] Infers `is_fcy` from currency codes (usd, eur, gbp, …) in addition to the explicit `fcy` keyword
 
 ## v2 — Logging & cap awareness (week 3–4)
 

@@ -53,7 +53,8 @@ The blue (pure) modules have no I/O. The bot layer assembles all inputs from sto
 |---|---|---|
 | `cardkaki/server.py` | FastAPI app exposing `/webhook` for Telegram | `app`, `webhook()` |
 | `cardkaki/bot.py` | Command + callback handlers, message formatting, inline keyboards | `_start`, `_help`, `_cards`, `_log`, `_pools`, `_recent`, `_lady_choice`, `_text`; `_help_toggle_callback`, `_recent_edit_callback`, `_recent_done_callback`, `_del_edit_callback`, `_restore_edit_callback`, other callback routers |
-| `cardkaki/parser.py` | Free-text → `ParsedInput` (merchant, amount, fcy flag) | `parse(text)` |
+| `cardkaki/parser.py` | Free-text → `ParsedInput` (merchant, amount, fcy flag) | `parse(text)` (sync regex), `parse_async(text)` (regex → LLM fallback) |
+| `cardkaki/llm_parser.py` | v1.5 LLM fallback — Gemma 4 31B via Gemini API; only called when regex fails and `GEMINI_API_KEY` is set | `llm_parse(text)`, `is_enabled()` |
 | `cardkaki/rule_engine.py` | Pure scoring: rank cards by miles for one transaction | `recommend()`, `select_bonus_for_log()` |
 | `cardkaki/usage.py` | Pure rollup: `TxnRow[]` → per-(card, bonus) period spend | `build_usage()` |
 | `cardkaki/periods.py` | Period math: `[start, end)` bounds, days-left, labels | `period_bounds()`, `days_left()`, `period_label()` |
@@ -564,7 +565,8 @@ The rule engine is the contract. If any other test suite is allowed to drift, th
 - **`tests/test_usage.py`** — `build_usage` rollup; posting-date vs txn-date routing; bonus_idx pinning; multi-period scenarios.
 - **`tests/test_storage.py`** — schema apply; CRUD on each table; cascades; per-user setting overrides.
 - **`tests/test_bot_handlers.py`** — handler-level tests with fake Telegram update objects; covers callback routing, inline keyboard payloads, error paths.
-- **`tests/test_parser.py`** — text → `ParsedInput` cases.
+- **`tests/test_parser.py`** — text → `ParsedInput` cases (sync regex path).
+- **`tests/test_llm_parser.py`** — `parse_async` with mocked Gemini client: LLM-disabled path, typo rescue, LLM-failure fallback to regex error.
 - **`tests/test_scenarios.py`** — end-to-end recommendation flows that string parser → engine → expected output.
 - **`tests/test_data.py`** — YAML loader sanity (real `cards.yaml` and `merchants.yaml` parse without errors).
 - **`tests/test_server.py`** — webhook contract.
