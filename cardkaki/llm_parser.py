@@ -10,8 +10,16 @@ import os
 
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
 
 from .models import ParsedInput
+
+
+class _ParseResult(BaseModel):
+    """Schema class for Gemini response_schema — no gt/exclusiveMinimum constraints."""
+    merchant: str
+    amount_sgd: float
+    is_fcy: bool
 
 _SYSTEM_PROMPT = (
     "You parse transaction input for a miles card recommender. "
@@ -24,7 +32,7 @@ _SYSTEM_PROMPT = (
     "'don don donki 88.50' → {\"merchant\":\"don_don_donki\",\"amount_sgd\":88.5,\"is_fcy\":false}"
 )
 
-_MODEL = "gemma-3-27b-it"
+_MODEL = "gemma-4-31b-it"
 _client: genai.Client | None = None
 
 
@@ -39,6 +47,15 @@ def _get_client() -> genai.Client:
     return _client
 
 
+def _extract(raw: str) -> ParsedInput:
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start < 0 or end <= start:
+        raise ValueError("LLM returned no parseable JSON")
+    data = json.loads(raw[start:end])
+    return ParsedInput.model_validate(data)
+
+
 async def llm_parse(text: str) -> ParsedInput:
     client = _get_client()
 
@@ -50,10 +67,10 @@ async def llm_parse(text: str) -> ParsedInput:
             config=types.GenerateContentConfig(
                 system_instruction=_SYSTEM_PROMPT,
                 response_mime_type="application/json",
-                response_schema=ParsedInput,
+                response_schema=_ParseResult,
             ),
         )
-        return ParsedInput.model_validate_json(resp.text)
+        return _extract(resp.text)
     except Exception:
         pass
 
@@ -63,9 +80,4 @@ async def llm_parse(text: str) -> ParsedInput:
         contents=f"Parse this transaction input and return only JSON: {text}",
         config=types.GenerateContentConfig(system_instruction=_SYSTEM_PROMPT),
     )
-    raw = resp.text.strip()
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start < 0 or end <= start:
-        raise ValueError("LLM returned no parseable JSON")
-    return ParsedInput.model_validate(json.loads(raw[start:end]))
+    return _extract(resp.text)
