@@ -129,6 +129,7 @@ def format_recommendations(
     is_fcy: bool,
     unknown_merchant: bool = False,
     all_excluded: bool = False,
+    lady_choice: str | None = None,
 ) -> str:
     """Format the bot's reply for a transaction lookup."""
     if not recs:
@@ -156,12 +157,13 @@ def format_recommendations(
     tie_miles = top[0].miles if (len(top) >= 2 and top[0].miles == top[1].miles and top[0].miles > 0) else None
     for i, r in enumerate(top):
         tie_note = "  _(tied)_" if tie_miles is not None and r.miles == tie_miles and i > 0 else ""
-        rendered_lines.append(f"{medals[i]} *{_md(r.card_name)}*: {r.effective_mpd:.1f} mpd{tie_note}")
-        # Primary reason on its own indented line(s)
         reason = r.reasons[0] if r.reasons else ""
-        if not reason or reason == "generic spend":
-            rendered_lines.append("   — base rate")
-        else:
+        if lady_choice and r.card_id == "uob_lady" and reason == "✓ chosen category":
+            reason = f"✓ {_LADY_CATEGORY_LABELS.get(lady_choice, lady_choice.capitalize())}"
+        icon = "⭐" if reason.startswith("✓") else "♾ "
+        rendered_lines.append(f"{medals[i]} *{_md(r.card_name)}* {icon} {r.effective_mpd:.1f} mpd{tie_note}")
+        # Primary reason on its own indented line(s) — only for bonus/excluded cards
+        if reason and reason != "generic spend":
             parts = _split_label_parts(reason)
             for part in parts:
                 if part.startswith("✓") or part.startswith("⚠") or part.startswith("—"):
@@ -293,7 +295,7 @@ def format_log_buttons(
     amount_sgd: float,
     is_fcy: bool,
 ) -> InlineKeyboardMarkup | None:
-    """Append [📝 Log <name>] buttons for the top-3 recs.
+    """Append [📝 Log <name>] buttons for the top-5 recs (two rows: 3+2).
 
     Each button stores its (card_id, merchant, amount, is_fcy) under a
     short token in `pending_logs` so the callback handler can recover the
@@ -301,7 +303,7 @@ def format_log_buttons(
     """
     if not recs:
         return None
-    top = recs[:3]
+    top = recs[:5]
     rows = []
     for r in top:
         token = uuid.uuid4().hex[:10]
@@ -314,7 +316,7 @@ def format_log_buttons(
         # Truncate long names so all 3 buttons fit in one row visually.
         name = r.card_name if len(r.card_name) <= 18 else r.card_name[:17] + "…"
         rows.append(InlineKeyboardButton(f"📝 {name}", callback_data=f"log:{token}"))
-    return InlineKeyboardMarkup([rows])
+    return InlineKeyboardMarkup([rows[:3], rows[3:]])
 
 
 def format_card_picker_buttons(cards: list[Card], token: str) -> InlineKeyboardMarkup:
@@ -735,6 +737,7 @@ async def compute_recommendation_payload(
     # Inject lady_chosen if the user owns Lady's and their chosen category
     # matches this merchant.
     categories = list(base_categories)
+    choice: str | None = None
     if any(c.id == "uob_lady" for c in owned_cards):
         choice = await storage.get_lady_choice(user_id, today=today)
         if choice and any(t in base_categories for t in LADY_CATEGORY_TAGS.get(choice, {choice})):
@@ -772,6 +775,7 @@ async def compute_recommendation_payload(
         is_fcy=parsed.is_fcy,
         unknown_merchant=unknown,
         all_excluded=all_excluded,
+        lady_choice=choice,
     )
     return RecommendationPayload(
         text=text_out,

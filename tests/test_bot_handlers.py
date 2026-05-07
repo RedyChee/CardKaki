@@ -489,6 +489,42 @@ def test_format_log_buttons_empty():
     assert format_log_buttons([], {}, merchant="x", amount_sgd=1, is_fcy=False) is None
 
 
+def test_format_log_buttons_five_recs_two_rows():
+    """5 recs → two rows: first 3, second 2."""
+    recs = [
+        Recommendation(card_id=f"card{i}", card_name=f"Card {i}", miles=100 - i, effective_mpd=4.0)
+        for i in range(5)
+    ]
+    pending = {}
+    kb = format_log_buttons(recs, pending, merchant="test", amount_sgd=10.0, is_fcy=False)
+    assert kb is not None
+    assert len(pending) == 5
+    assert len(kb.inline_keyboard) == 2
+    assert len(kb.inline_keyboard[0]) == 3
+    assert len(kb.inline_keyboard[1]) == 2
+
+
+def test_format_recs_lady_choice_substituted():
+    """Lady's card 'chosen category' replaced with actual category label."""
+    rec = Recommendation(
+        card_id="uob_lady", card_name="UOB Lady's Card",
+        miles=400, effective_mpd=4.0, reasons=["✓ chosen category"],
+    )
+    out = format_recommendations(
+        [rec], merchant="klook", amount_sgd=100, is_fcy=False, lady_choice="travel"
+    )
+    assert "✓ Travel" in out
+    assert "chosen category" not in out
+
+
+def test_format_recs_base_rate_shows_infinity_icon():
+    """Base-rate cards show ♾ and no '— base rate' line."""
+    rec = Recommendation(card_id="uob_prvi", card_name="UOB PRVI Miles", miles=140, effective_mpd=1.4)
+    out = format_recommendations([rec], merchant="x", amount_sgd=100, is_fcy=False)
+    assert "♾" in out
+    assert "— base rate" not in out
+
+
 # ---------------------------------------------------------------------------
 # v2: ship-gate end-to-end
 # ---------------------------------------------------------------------------
