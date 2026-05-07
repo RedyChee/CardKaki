@@ -25,7 +25,7 @@ _SYSTEM_PROMPT = (
     "You parse transaction input for a miles card recommender. "
     "Extract: merchant (lowercase, spaces become underscores), "
     "amount_sgd (positive float, SGD value), "
-    "is_fcy (true only if the 'fcy' keyword is present). "
+    "is_fcy (true if 'fcy' keyword is present OR a non-SGD currency code appears, e.g. usd, eur, gbp, jpy, aud — false if currency is sgd or unspecified). "
     "Return only a JSON object with exactly these keys. Examples: "
     "'Cold Storage 45' → {\"merchant\":\"cold_storage\",\"amount_sgd\":45.0,\"is_fcy\":false}; "
     "'klook 320 fcy' → {\"merchant\":\"klook\",\"amount_sgd\":320.0,\"is_fcy\":true}; "
