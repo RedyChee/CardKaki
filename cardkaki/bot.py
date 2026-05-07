@@ -26,7 +26,7 @@ from telegram.ext import (
 
 from .data import MerchantEntry
 from .models import Card, Recommendation, TxnRow
-from .parser import parse
+from .parser import parse_async
 from .periods import days_left, period_bounds, period_label
 from .posting import posting_period_warning, resolve_posting_date
 from .rule_engine import recommend, select_bonus_for_log
@@ -715,7 +715,7 @@ async def compute_recommendation_payload(
 ) -> RecommendationPayload:
     today = today or date.today()
     try:
-        parsed = parse(text)
+        parsed = await parse_async(text)
     except ValueError as e:
         return RecommendationPayload(text=str(e))
 
