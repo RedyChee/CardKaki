@@ -5,11 +5,12 @@ from cardkaki.data import load_cards, load_merchants
 DATA = Path(__file__).resolve().parent.parent / "data"
 
 
-def test_cards_yaml_validates_and_has_11():
+def test_cards_yaml_validates_and_has_13():
     cards = load_cards(DATA / "cards.yaml")
-    assert len(cards) == 11
+    assert len(cards) == 13
     expected = {
-        "hsbc_revo", "uob_ppv", "uob_vs", "uob_prvi", "uob_lady",
+        "hsbc_revo", "uob_ppv", "uob_vs", "uob_prvi",
+        "uob_lady", "uob_lady_solitaire", "uob_lady_solitaire_metal",
         "citi_rewards", "citi_pm", "dbs_altitude", "dbs_woman",
         "amex_kf", "maybank_xl",
     }
@@ -32,9 +33,19 @@ def test_card_invariants():
     for cid in ("hsbc_revo", "citi_rewards"):
         assert cards[cid].base_rate_mpd_fcy is None, f"{cid} should not set base_rate_mpd_fcy"
 
-    # UOB VS has two bonus rules; DBS Altitude has none
+    # Bonus-rule counts that drift over time as Milelion T&Cs update
     assert len(cards["uob_vs"].bonus) == 2
     assert cards["dbs_altitude"].bonus == []
+    assert len(cards["hsbc_revo"].bonus) == 2  # regular + enhanced tiers
+    assert len(cards["uob_prvi"].bonus) == 2  # Agoda + SE-Asia FCY (Expedia removed)
+    assert cards["citi_pm"].bonus == []  # all promo bonuses lapsed 31 Dec 2025
+
+    # HSBC tier flags must be set on its bonus rules
+    tiers = {b.tier for b in cards["hsbc_revo"].bonus}
+    assert tiers == {"regular", "enhanced"}
+
+    # Citi Rewards bonus must NOT apply to FCY anymore
+    assert cards["citi_rewards"].bonus[0].applies_to_fcy is False
 
 
 def test_merchants_yaml_loads():

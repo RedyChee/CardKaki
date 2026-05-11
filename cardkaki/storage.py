@@ -70,6 +70,14 @@ CREATE TABLE IF NOT EXISTS card_anniversaries (
   PRIMARY KEY (telegram_user_id, card_id),
   FOREIGN KEY (telegram_user_id) REFERENCES users(telegram_user_id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS card_tiers (
+  telegram_user_id INTEGER NOT NULL,
+  card_id TEXT NOT NULL,
+  tier TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (telegram_user_id, card_id),
+  FOREIGN KEY (telegram_user_id) REFERENCES users(telegram_user_id) ON DELETE CASCADE
+);
 """
 
 
@@ -316,7 +324,13 @@ class Storage:
     async def get_lady_choice(
         self, telegram_user_id: int, today: date
     ) -> str | None:
-        """Returns the most recent category whose effective_from is on or before `today`."""
+        """Returns the most recent category whose effective_from is on or before `today`.
+
+        Note: per Milelion FAQ, Lady's Card / Solitaire allow up to 2 chosen
+        categories. v1 supports a single category only — extending to 2 requires
+        ALTER TABLE for a slot column plus injection-loop changes in bot.py.
+        Tracked in data/cards.yaml notes for uob_lady_solitaire.
+        """
         async with aiosqlite.connect(self.path) as db:
             cur = await db.execute(
                 "SELECT category FROM lady_choices "
@@ -392,3 +406,35 @@ class Storage:
             )
             rows = await cur.fetchall()
         return {cid: int(m) for cid, m in rows}
+
+    # ------------------------------------------------------------------
+    # Card tiers (HSBC Revolution regular vs enhanced)
+    # ------------------------------------------------------------------
+
+    async def set_card_tier(
+        self, telegram_user_id: int, card_id: str, tier: str
+    ) -> None:
+        if tier not in ("regular", "enhanced"):
+            raise ValueError("tier must be 'regular' or 'enhanced'")
+        await self.upsert_user(telegram_user_id)
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT INTO card_tiers (telegram_user_id, card_id, tier)
+                VALUES (?, ?, ?)
+                ON CONFLICT(telegram_user_id, card_id) DO UPDATE SET
+                  tier = excluded.tier,
+                  updated_at = datetime('now')
+                """,
+                (telegram_user_id, card_id, tier),
+            )
+            await db.commit()
+
+    async def get_card_tiers(self, telegram_user_id: int) -> dict[str, str]:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "SELECT card_id, tier FROM card_tiers WHERE telegram_user_id = ?",
+                (telegram_user_id,),
+            )
+            rows = await cur.fetchall()
+        return {cid: t for cid, t in rows}

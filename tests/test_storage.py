@@ -273,3 +273,37 @@ async def test_get_anniversaries_returns_all_for_user(storage):
 
 async def test_get_anniversaries_empty(storage):
     assert await storage.get_anniversaries(999) == {}
+
+
+# ---------------------------------------------------------------------------
+# Card tiers (HSBC Revolution regular vs enhanced)
+# ---------------------------------------------------------------------------
+
+
+async def test_set_card_tier_round_trip(storage):
+    await storage.set_card_tier(1, "hsbc_revo", "enhanced")
+    tiers = await storage.get_card_tiers(1)
+    assert tiers == {"hsbc_revo": "enhanced"}
+
+
+async def test_set_card_tier_overwrites(storage):
+    await storage.set_card_tier(1, "hsbc_revo", "regular")
+    await storage.set_card_tier(1, "hsbc_revo", "enhanced")
+    tiers = await storage.get_card_tiers(1)
+    assert tiers == {"hsbc_revo": "enhanced"}
+
+
+async def test_set_card_tier_rejects_invalid(storage):
+    with pytest.raises(ValueError):
+        await storage.set_card_tier(1, "hsbc_revo", "platinum")
+
+
+async def test_get_card_tiers_scoped_per_user(storage):
+    await storage.set_card_tier(1, "hsbc_revo", "enhanced")
+    await storage.set_card_tier(2, "hsbc_revo", "regular")
+    assert await storage.get_card_tiers(1) == {"hsbc_revo": "enhanced"}
+    assert await storage.get_card_tiers(2) == {"hsbc_revo": "regular"}
+
+
+async def test_get_card_tiers_empty(storage):
+    assert await storage.get_card_tiers(999) == {}

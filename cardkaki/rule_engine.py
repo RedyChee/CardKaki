@@ -29,6 +29,7 @@ def recommend(
     posting_delays: dict[str, int] | None = None,
     same_day_merchant: bool = False,
     anniversary_months: dict[str, int] | None = None,
+    card_tiers: dict[str, str] | None = None,
 ) -> list[Recommendation]:
     if amount_sgd <= 0:
         raise ValueError("amount_sgd must be > 0")
@@ -36,8 +37,9 @@ def recommend(
     merchant_set = set(merchant_categories)
     recs: list[Recommendation] = []
     for card in user_cards:
+        tier = (card_tiers or {}).get(card.id)
         if usage is None:
-            rec = _evaluate_card_v1(card, merchant_set, amount_sgd, is_fcy)
+            rec = _evaluate_card_v1(card, merchant_set, amount_sgd, is_fcy, tier=tier)
         else:
             rec = _evaluate_card_v2(
                 card,
@@ -50,6 +52,7 @@ def recommend(
                 posting_delays=posting_delays,
                 same_day_merchant=same_day_merchant,
                 anniversary_months=anniversary_months,
+                tier=tier,
             )
         recs.append(rec)
 
@@ -71,12 +74,14 @@ def _base_rate(card: Card, is_fcy: bool) -> float:
 
 
 def _bonus_qualifies(
-    bonus: Bonus, merchant_set: set[str], is_fcy: bool
+    bonus: Bonus, merchant_set: set[str], is_fcy: bool, tier: str | None = None
 ) -> tuple[bool, str | None]:
     """Returns (qualifies, exclusion_reason). exclusion_reason is set when
     a category exclusion vetoes an otherwise-matching bonus."""
     cat_match = (not bonus.categories) or bool(set(bonus.categories) & merchant_set)
     if not cat_match:
+        return False, None
+    if bonus.tier is not None and bonus.tier != (tier or "regular"):
         return False, None
     if is_fcy and not bonus.applies_to_fcy:
         return False, None
@@ -120,6 +125,7 @@ def _evaluate_card_v1(
     merchant_set: set[str],
     amount_sgd: float,
     is_fcy: bool,
+    tier: str | None = None,
 ) -> Recommendation:
     reasons: list[str] = []
     fcy_fee = card.fcy_fee if is_fcy else 0.0
@@ -134,7 +140,7 @@ def _evaluate_card_v1(
     excluded_reason: str | None = None
 
     for bonus in card.bonus:
-        ok, excl = _bonus_qualifies(bonus, merchant_set, is_fcy)
+        ok, excl = _bonus_qualifies(bonus, merchant_set, is_fcy, tier=tier)
         if not ok:
             if excl is not None and excluded_reason is None:
                 excluded_reason = excl
@@ -185,6 +191,7 @@ def select_bonus_for_log(
     today: date,
     usage: dict[tuple[str, int], BonusUsage],
     statement_days: dict[str, int] | None = None,
+    tier: str | None = None,
 ) -> tuple[int | None, str | None, int]:
     """Determine which bonus_idx (if any) a txn qualifies for, and how
     many miles it earns under current usage state.
@@ -208,7 +215,7 @@ def select_bonus_for_log(
     candidates: list[tuple[int, int, Bonus]] = []  # (miles, idx, bonus)
 
     for idx, bonus in enumerate(card.bonus):
-        ok, _ = _bonus_qualifies(bonus, merchant_set, is_fcy)
+        ok, _ = _bonus_qualifies(bonus, merchant_set, is_fcy, tier=tier)
         if not ok:
             continue
         u = usage.get((card.id, idx), BonusUsage(spend_sgd=0.0, min_spend_sgd=0.0))
@@ -254,6 +261,7 @@ def _evaluate_card_v2(
     posting_delays: dict[str, int] | None = None,
     same_day_merchant: bool = False,
     anniversary_months: dict[str, int] | None = None,
+    tier: str | None = None,
 ) -> Recommendation:
     reasons: list[str] = []
     fcy_fee = card.fcy_fee if is_fcy else 0.0
@@ -282,7 +290,7 @@ def _evaluate_card_v2(
     excluded_reason: str | None = None
 
     for idx, bonus in enumerate(card.bonus):
-        ok, excl = _bonus_qualifies(bonus, merchant_set, is_fcy)
+        ok, excl = _bonus_qualifies(bonus, merchant_set, is_fcy, tier=tier)
         if not ok:
             if excl is not None and excluded_reason is None:
                 excluded_reason = excl

@@ -81,7 +81,9 @@ HELP_ADVANCED = (
     "`/cards` — interactive wallet manager\n"
     "`/pools` — cap usage by period\n"
     "`/recent` — last transactions\n"
-    "`/lady\\_choice [category]` — set UOB Lady's bonus\n\n"
+    "`/lady\\_choice [category]` — set UOB Lady's bonus\n"
+    "`/hsbc\\_tier <regular|enhanced>` — pick HSBC Revo earn tier "
+    "(enhanced = 8mpd needs S$50K+ in HSBC Everyday Global Account)\n\n"
     "_Rates are best-effort (Milelion). Verify against your statement._"
 )
 
@@ -737,6 +739,10 @@ async def compute_recommendation_payload(
     # Inject lady_chosen if the user owns Lady's and their chosen category
     # matches this merchant.
     categories = list(base_categories)
+    # LLM parser may surface extra category tags (e.g. seasia_fcy for IDR/MYR/THB/VND).
+    for tag in parsed.extra_categories:
+        if tag and tag not in categories:
+            categories.append(tag)
     choice: str | None = None
     if any(c.id == "uob_lady" for c in owned_cards):
         choice = await storage.get_lady_choice(user_id, today=today)
@@ -747,6 +753,7 @@ async def compute_recommendation_payload(
     statement_days = await storage.get_statement_days(user_id)
     posting_delays = await storage.get_posting_delays(user_id)
     anniversary_months = await storage.get_anniversaries(user_id)
+    card_tiers = await storage.get_card_tiers(user_id)
     earliest_period_start = _earliest_period_start(owned_cards, today, statement_days)
     txns = await storage.list_transactions_since(user_id, since=earliest_period_start)
     usage = build_usage(txns, owned_cards, today, statement_days, posting_delays, anniversary_months)
@@ -762,6 +769,7 @@ async def compute_recommendation_payload(
         posting_delays=posting_delays,
         same_day_merchant=same_day_merchant,
         anniversary_months=anniversary_months or None,
+        card_tiers=card_tiers or None,
     )
 
     all_excluded = bool(categories) and all(
@@ -921,13 +929,15 @@ async def handle_log_command(
     statement_days = await storage.get_statement_days(user_id)
     posting_delays = await storage.get_posting_delays(user_id)
     anniversary_months = await storage.get_anniversaries(user_id)
+    card_tiers = await storage.get_card_tiers(user_id)
     owned_cards = [catalog[c] for c in owned if c in catalog]
     earliest = _earliest_period_start(owned_cards, txn_date, statement_days)
     txns = await storage.list_transactions_since(user_id, since=earliest)
     usage = build_usage(txns, owned_cards, txn_date, statement_days, posting_delays, anniversary_months)
 
     bonus_idx, bonus_label, miles = select_bonus_for_log(
-        card, categories, amount, is_fcy, txn_date, usage, statement_days
+        card, categories, amount, is_fcy, txn_date, usage, statement_days,
+        tier=card_tiers.get(card_id),
     )
 
     posting_warning: str | None = None
@@ -1022,6 +1032,37 @@ async def handle_lady_choice_command(
         return (f"✅ Set Lady's category to `{category}` — enjoy the bonus!", None)
     current = await storage.get_lady_choice(user_id, today=today)
     return format_lady_choice_keyboard(current)
+
+
+async def handle_hsbc_tier_command(
+    args: list[str],
+    user_id: int,
+    storage: Storage,
+) -> tuple[str, InlineKeyboardMarkup | None]:
+    """Set HSBC Revolution earn tier: regular (4mpd cap S$1k) or
+    enhanced (8mpd cap S$1.2k, requires S$50K+ ADB in HSBC Everyday Global Account).
+    """
+    if not args:
+        tiers = await storage.get_card_tiers(user_id)
+        current = tiers.get("hsbc_revo", "regular")
+        return (
+            f"HSBC Revolution earn tier: *{current}*\n\n"
+            "Use `/hsbc_tier regular` for 4mpd cap S$1k/mo (default).\n"
+            "Use `/hsbc_tier enhanced` for 8mpd cap S$1.2k/mo "
+            "(needs S$50K+ ADB in HSBC Everyday Global Account).",
+            None,
+        )
+    tier = args[0].lower()
+    if tier not in ("regular", "enhanced"):
+        return (
+            "❌ Tier must be `regular` or `enhanced`. "
+            "Run `/hsbc_tier` for details.",
+            None,
+        )
+    await storage.set_card_tier(user_id, "hsbc_revo", tier)
+    if tier == "enhanced":
+        return ("✅ HSBC Revolution set to *enhanced* (8mpd, cap S$1.2k/mo).", None)
+    return ("✅ HSBC Revolution set to *regular* (4mpd, cap S$1k/mo).", None)
 
 
 # ---------------------------------------------------------------------------
@@ -1308,6 +1349,15 @@ async def _lady_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
 
+async def _hsbc_tier(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.effective_user:
+        return
+    storage: Storage = context.application.bot_data["storage"]
+    args = (update.message.text or "").split()[1:]
+    text, kb = await handle_hsbc_tier_command(args, update.effective_user.id, storage)
+    await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+
+
 async def _log_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not query or not update.effective_user or not query.data:
@@ -1581,6 +1631,7 @@ BOT_COMMANDS = [
     BotCommand("pools", "Show your cap usage across all cards"),
     BotCommand("recent", "Show recent logged transactions"),
     BotCommand("lady_choice", "Pick UOB Lady's bonus category"),
+    BotCommand("hsbc_tier", "Set HSBC Revolution earn tier (regular/enhanced)"),
 ]
 
 
@@ -1603,6 +1654,7 @@ def build_application(
     app.add_handler(CommandHandler("pools", _pools))
     app.add_handler(CommandHandler("recent", _recent))
     app.add_handler(CommandHandler("lady_choice", _lady_choice))
+    app.add_handler(CommandHandler("hsbc_tier", _hsbc_tier))
     app.add_handler(CallbackQueryHandler(_cards_callback, pattern=r"^ck:"))
     app.add_handler(CallbackQueryHandler(_log_callback, pattern=r"^log:"))
     app.add_handler(CallbackQueryHandler(_log_card_callback, pattern=r"^lcard:"))

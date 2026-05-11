@@ -262,12 +262,100 @@ def test_amex_kf_no_fcy_boost(cards):
     assert out[0].miles == 110
 
 
-def test_citi_pm_agoda_fcy_higher(cards):
+def test_citi_pm_base_only_after_promo_lapse(cards):
+    """Citi PM's Kaligo/Agoda promos lapsed 31 Dec 2025 — card is base-only now."""
     pm = cards["citi_pm"]
     out_sgd = recommend([pm], ["agoda"], 100.0, is_fcy=False)
     out_fcy = recommend([pm], ["agoda"], 100.0, is_fcy=True)
-    assert out_sgd[0].miles == 620  # 100 * 6.2
-    assert out_fcy[0].miles == 720  # 100 * 7.2
+    assert out_sgd[0].miles == 120  # 100 * 1.2 base SGD
+    assert out_fcy[0].miles == 220  # 100 * 2.2 base FCY (cost 103.25)
+
+
+def test_hsbc_revo_default_tier_is_regular(cards):
+    """No card_tiers passed → defaults to regular tier (4mpd cap S$1k)."""
+    revo = cards["hsbc_revo"]
+    out = recommend([revo], ["online_shopping"], 100.0)
+    assert out[0].miles == 400  # 100 * 4 mpd regular
+
+
+def test_hsbc_revo_enhanced_tier_8mpd(cards):
+    """Enhanced-tier user (S$50K+ EGA ADB) gets 8mpd."""
+    revo = cards["hsbc_revo"]
+    out = recommend(
+        [revo], ["online_shopping"], 100.0,
+        card_tiers={"hsbc_revo": "enhanced"},
+    )
+    assert out[0].miles == 800  # 100 * 8 mpd enhanced
+
+
+def test_hsbc_revo_explicit_regular_tier(cards):
+    revo = cards["hsbc_revo"]
+    out = recommend(
+        [revo], ["online_shopping"], 100.0,
+        card_tiers={"hsbc_revo": "regular"},
+    )
+    assert out[0].miles == 400
+
+
+def test_hsbc_revo_enhanced_cap_blends_at_1200(cards):
+    """Enhanced tier cap is S$1,200; cap-blend kicks in past that."""
+    revo = cards["hsbc_revo"]
+    usage = {("hsbc_revo", 1): BonusUsage(spend_sgd=1100, min_spend_sgd=0)}
+    out = recommend(
+        [revo], ["online_shopping"], 200.0,
+        today=date(2026, 5, 4), usage=usage,
+        card_tiers={"hsbc_revo": "enhanced"},
+    )
+    # 100 left of S$1,200 cap: 100 @ 8mpd = 800; 100 base @ 0.4 = 40 → 840 mi
+    assert out[0].miles == 800 + 40
+
+
+def test_citi_rewards_fcy_no_bonus(cards):
+    """Citi Rewards bonus is SGD-only — FCY earns base (corrected per Feb 2026 review)."""
+    rewards = cards["citi_rewards"]
+    out = recommend([rewards], ["online_shopping"], 100.0, is_fcy=True)
+    # Base 0.4 only; floor_sgd_1(100)=100; 100*0.4=40
+    assert out[0].miles == 40
+
+
+def test_uob_prvi_seasia_fcy_3mpd(cards):
+    """SE-Asia FCY rule fires when seasia_fcy category is injected (e.g., IDR txn)."""
+    prvi = cards["uob_prvi"]
+    out = recommend([prvi], ["seasia_fcy"], 100.0, is_fcy=True)
+    # 3 mpd; floor_sgd_5(100)=100; 100*3=300
+    assert out[0].miles == 300
+
+
+def test_uob_prvi_fcy_without_seasia_falls_to_base(cards):
+    """Generic FCY without seasia_fcy category gets the 2.4 base FCY rate."""
+    prvi = cards["uob_prvi"]
+    out = recommend([prvi], ["unknown"], 100.0, is_fcy=True)
+    # base FCY 2.4; floor_sgd_5(100)=100; 100*2.4=240
+    assert out[0].miles == 240
+
+
+def test_uob_prvi_no_more_expedia_bonus(cards):
+    """Expedia categories should fall to base now that the bonus has lapsed (31 Mar 2026)."""
+    prvi = cards["uob_prvi"]
+    out = recommend([prvi], ["expedia"], 100.0)
+    # base 1.4; floor_sgd_5(100)=100; 100*1.4=140
+    assert out[0].miles == 140
+    # Same for expedia_flight (the 3mpd rule was removed too)
+    out_flight = recommend([prvi], ["expedia_flight"], 100.0)
+    assert out_flight[0].miles == 140
+
+
+def test_uob_lady_solitaire_loads_and_recommends(cards):
+    sol = cards["uob_lady_solitaire"]
+    out = recommend([sol], ["lady_chosen", "online_shopping"], 100.0)
+    # 4 mpd; floor_sgd_5(100)=100; 100*4=400
+    assert out[0].miles == 400
+
+
+def test_uob_lady_solitaire_metal_higher_cap(cards):
+    """Solitaire Metal cap is S$2,000 vs Lady's S$1,000."""
+    metal = cards["uob_lady_solitaire_metal"]
+    assert metal.bonus[0].cap_sgd == 2000
 
 
 def test_hsbc_revo_fast_food_excluded(cards):
@@ -437,24 +525,24 @@ def test_cap_with_floor_sgd_5_rounding_interaction(cards):
 
 
 def test_cap_blended_picks_higher_effective_miles_bonus(cards):
-    """If two bonuses qualify and one is cap-blended down, the engine
-    should pick the one that yields more miles for THIS txn — not by
-    nominal rate alone. Uses Citi PM Agoda SGD vs FCY differential."""
-    pm = cards["citi_pm"]
-    # Citi PM Agoda has SGD bonus 6.2 and FCY bonus 7.2; an SGD txn only
-    # qualifies for SGD bonus (FCY scope mismatched). This tests that the
-    # engine doesn't accidentally pick a higher-rate but scope-mismatched bonus.
+    """If two bonuses qualify and one is cap-blended down, the engine should
+    pick the one that yields more miles for THIS txn — not by nominal rate alone.
+    Uses UOB VS where both bonus rules can fire on a contactless FCY txn:
+    rule 0 (overseas/FCY 4mpd) qualifies, rule 1 (petrol+contactless 4mpd) is
+    SGD-only so rejected on FCY. The single qualifying rule wins.
+    """
+    vs = cards["uob_vs"]
+    # FCY contactless txn, prior FCY min-spend already met (1100), petrol min unmet.
     out = recommend(
-        [pm], ["agoda"], 100.0, is_fcy=False,
+        [vs], ["contactless"], 100.0, is_fcy=True,
         today=date(2026, 5, 4),
         usage={
-            ("citi_pm", 0): BonusUsage(0, 0),  # Kaligo
-            ("citi_pm", 1): BonusUsage(0, 0),  # Agoda SGD
-            ("citi_pm", 2): BonusUsage(0, 0),  # Agoda FCY
+            ("uob_vs", 0): BonusUsage(spend_sgd=0, min_spend_sgd=1100),
+            ("uob_vs", 1): BonusUsage(spend_sgd=0, min_spend_sgd=0),
         },
     )
-    # Should pick Agoda SGD: 100 * 6.2 = 620
-    assert out[0].miles == 620
+    # FCY 4mpd fires; floor_sgd_5(100)=100; 100*4=400
+    assert out[0].miles == 400
 
 
 def test_lady_chosen_with_cap_partial(cards):

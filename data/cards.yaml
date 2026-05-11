@@ -15,7 +15,8 @@
   rounding: { method: floor_sgd_1 }
   bonus:
     - rate_mpd: 4.0
-      label: online or contactless
+      label: online or contactless (regular tier)
+      tier: regular
       categories:
         [online_shopping, dining_local, contactless, entertainment, dept_store,
          shopping, transport, travel, grab]
@@ -27,12 +28,26 @@
       applies_to_fcy: true
       cap_sgd: 1000
       cap_period: calendar_month
+    - rate_mpd: 8.0
+      label: online or contactless (enhanced tier, S$50K+ EGA ADB)
+      tier: enhanced
+      categories:
+        [online_shopping, dining_local, contactless, entertainment, dept_store,
+         shopping, transport, travel, grab]
+      excluded_categories:
+        [fast_food_excluded, travel_excluded, airline_excluded, public_transit_excluded,
+         wallet_topup, insurance_excluded, education_excluded, utilities_excluded,
+         govt_excluded, tax_excluded, hospital_excluded, charity_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: true
+      cap_sgd: 1200
+      cap_period: calendar_month
   pool: hsbc_rewards
   tracks_by: posting_date
   posting_delay_days: 1
   anniversary_year: false
   fcy_fee: 0.0325
-  notes: "Marketed 4 mpd; effective 3.33 mpd via 30k:10k HSBC pts:KF conversion. v1 uses marketed. Source: milelion.com/2026/04/08/review-hsbc-revolution-card"
+  notes: "Two tiers (eff 1 Apr 2026): regular = 4mpd cap S$1k/mo; enhanced = 8mpd cap S$1.2k/mo for S$50K+ ADB in HSBC Everyday Global Account. User selects tier on card add via /hsbc_tier. Source: milelion.com/2026/04/08/review-hsbc-revolution-card"
 
 - id: uob_ppv
   name: UOB Preferred Platinum Visa
@@ -109,7 +124,7 @@
 - id: uob_prvi
   name: UOB PRVI Miles
   short_name: UOB PRVI Miles
-  descriptor: Agoda & Expedia
+  descriptor: Agoda + SE-Asia FCY
   issuer: uob
   network: visa
   base_rate_mpd: 1.4
@@ -124,29 +139,21 @@
          insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
       applies_to_sgd: true
       applies_to_fcy: true
-    - rate_mpd: 8.0
-      label: Expedia hotel + Expedia activities + Expedia car rental
-      categories: [expedia]
-      excluded_categories:
-        [charity_excluded, education_excluded, govt_excluded, hospital_excluded,
-         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
-      applies_to_sgd: true
-      applies_to_fcy: true
     - rate_mpd: 3.0
-      label: Expedia flight
-      categories: [expedia_flight]
+      label: SE-Asia FCY (IDR/MYR/THB/VND)
+      categories: [seasia_fcy]
       excluded_categories:
         [charity_excluded, education_excluded, govt_excluded, hospital_excluded,
          insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
-      applies_to_sgd: true
+      applies_to_sgd: false
       applies_to_fcy: true
   pool: uob_unis
   tracks_by: posting_date
   posting_delay_days: 2
   anniversary_year: false
   fcy_fee: 0.0325
-  pool_note: "Special Agoda & Expedia landing page"
-  notes: "No cap. SE-Asian currency boost (3.0 FCY for IDR/MYR/THB/VND) not modeled in v1. Min S$5/txn. Source: milelion.com/2026/02/04/review-uob-prvi-miles-card"
+  pool_note: "Special Agoda landing page"
+  notes: "No cap. Agoda 8mpd promo expires 31 May 2026 (verify before refresh). Expedia bonuses (8mpd hotels/activities/car-rentals; 3mpd flights) lapsed 31 Mar 2026 — removed. SE-Asia FCY 3mpd boost (IDR/MYR/THB/VND) modeled via seasia_fcy category, injected by llm_parser. Min S$5/txn. Source: milelion.com/2026/02/04/review-uob-prvi-miles-card"
 
 - id: uob_lady
   name: UOB Lady's Card
@@ -163,6 +170,8 @@
       excluded_categories:
         [petrol_uob_excluded, charity_excluded, education_excluded, govt_excluded,
          insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: true
       cap_sgd: 1000
       cap_period: calendar_month
   pool: uob_unis
@@ -170,7 +179,59 @@
   posting_delay_days: 2
   anniversary_year: false
   fcy_fee: 0.0325
-  notes: "v2: per-user chosen category via /lady_choice. Bonus fires when bot injects 'lady_chosen' based on user's stored pick + merchant matches. No Milelion URL provided; encoded against general SG knowledge."
+  notes: "User picks up to 2 categories (Beauty, Dining, Entertainment, Family, Fashion, Transport, Travel) via /lady_choice; cap is aggregate S$1k/mo regardless of category count. Bonus applies on FCY too. Source: milelion.com/2025/10/31/complete-faqs-uob-ladys-ladys-solitaire-card"
+
+- id: uob_lady_solitaire
+  name: UOB Lady's Solitaire
+  short_name: UOB Lady's Solitaire
+  descriptor: chosen 2 categories
+  issuer: uob
+  network: visa
+  base_rate_mpd: 0.4
+  rounding: { method: floor_sgd_5, unis_per_block: 3.5 }
+  bonus:
+    - rate_mpd: 4.0
+      label: chosen category
+      categories: [lady_chosen]
+      excluded_categories:
+        [petrol_uob_excluded, charity_excluded, education_excluded, govt_excluded,
+         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: true
+      cap_sgd: 1500
+      cap_period: calendar_month
+  pool: uob_unis
+  tracks_by: posting_date
+  posting_delay_days: 2
+  anniversary_year: false
+  fcy_fee: 0.0325
+  notes: "Income S$120k. Per Milelion: cap is S$750/category × 2 chosen = S$1.5k aggregate (1,350 UNI$ each = 2,700 UNI$). v1 models aggregate S$1.5k cap; per-category sub-caps not yet enforced. Source: milelion.com/2025/10/31/complete-faqs-uob-ladys-ladys-solitaire-card"
+
+- id: uob_lady_solitaire_metal
+  name: UOB Lady's Solitaire Metal
+  short_name: UOB Lady's Solitaire Metal
+  descriptor: chosen 2 categories
+  issuer: uob
+  network: visa
+  base_rate_mpd: 0.4
+  rounding: { method: floor_sgd_5, unis_per_block: 3.5 }
+  bonus:
+    - rate_mpd: 4.0
+      label: chosen category
+      categories: [lady_chosen]
+      excluded_categories:
+        [petrol_uob_excluded, charity_excluded, education_excluded, govt_excluded,
+         insurance_excluded, wallet_topup, real_estate_excluded, utilities_excluded]
+      applies_to_sgd: true
+      applies_to_fcy: true
+      cap_sgd: 2000
+      cap_period: calendar_month
+  pool: uob_unis
+  tracks_by: posting_date
+  posting_delay_days: 2
+  anniversary_year: false
+  fcy_fee: 0.0325
+  notes: "Aggregate S$2k/mo cap (3,600 UNI$) across up to 2 chosen categories. Source: milelion.com/2025/10/31/complete-faqs-uob-ladys-ladys-solitaire-card"
 
 - id: citi_rewards
   name: Citi Rewards
@@ -189,7 +250,7 @@
          utilities_excluded, govt_excluded, insurance_excluded, education_excluded,
          hospital_excluded, charity_excluded, petrol]
       applies_to_sgd: true
-      applies_to_fcy: true
+      applies_to_fcy: false
       cap_sgd: 1000
       cap_period: statement_month
   pool: citi_thankyou
@@ -197,7 +258,7 @@
   posting_delay_days: 1
   anniversary_year: false
   fcy_fee: 0.0325
-  notes: "Statement month cap; bonus DOES apply to FCY in qualifying categories. v2: prompts for statement closing day on add. Source: milelion.com/2026/02/27/review-citi-rewards-credit-card"
+  notes: "Statement month cap; bonus is SGD-only — FCY earns base 0.4 mpd (corrected from prior assumption per Feb 2026 Milelion review). Visa version being discontinued in 2026 (verify before refresh). Source: milelion.com/2026/02/27/review-citi-rewards-credit-card"
 
 - id: citi_pm
   name: Citi PremierMiles
@@ -208,31 +269,13 @@
   base_rate_mpd: 1.2
   base_rate_mpd_fcy: 2.2
   rounding: { method: floor_sgd_1 }
-  bonus:
-    - rate_mpd: 10.0
-      label: Kaligo (booking by 31 Dec 2025)
-      categories: [kaligo]
-      excluded_categories: []
-      applies_to_sgd: true
-      applies_to_fcy: true
-    - rate_mpd: 6.2
-      label: Agoda SGD
-      categories: [agoda]
-      excluded_categories: []
-      applies_to_sgd: true
-      applies_to_fcy: false
-    - rate_mpd: 7.2
-      label: Agoda FCY
-      categories: [agoda]
-      excluded_categories: []
-      applies_to_sgd: false
-      applies_to_fcy: true
+  bonus: []
   pool: citi_miles
   tracks_by: posting_date
   posting_delay_days: 1
   anniversary_year: false
   fcy_fee: 0.0325
-  notes: "Bonus rates valid by 31 Dec 2025 (stays till mid-2026). Source: milelion.com/2025/06/29/review-citi-premiermiles-card"
+  notes: "Base-only as of May 2026; Kaligo (10mpd), Agoda SGD (6.2mpd), Agoda FCY (7.2mpd) promo rates lapsed 31 Dec 2025. Reverify Citi T&Cs before re-adding any bonus. Source: milelion.com/2025/06/29/review-citi-premiermiles-card"
 
 - id: dbs_altitude
   name: DBS Altitude

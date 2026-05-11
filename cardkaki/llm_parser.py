@@ -20,16 +20,19 @@ class _ParseResult(BaseModel):
     merchant: str
     amount_sgd: float
     is_fcy: bool
+    extra_categories: list[str] = []
 
 _SYSTEM_PROMPT = (
     "You parse transaction input for a miles card recommender. "
     "Extract: merchant (lowercase, spaces become underscores), "
     "amount_sgd (positive float, SGD value), "
-    "is_fcy (true if 'fcy' keyword is present OR a non-SGD currency code appears, e.g. usd, eur, gbp, jpy, aud — false if currency is sgd or unspecified). "
+    "is_fcy (true if 'fcy' keyword is present OR a non-SGD currency code appears, e.g. usd, eur, gbp, jpy, aud — false if currency is sgd or unspecified), "
+    "extra_categories (list of extra category tags to inject — currently only 'seasia_fcy' when the currency is one of idr, myr, thb, vnd; otherwise empty list). "
     "Return only a JSON object with exactly these keys. Examples: "
-    "'Cold Storage 45' → {\"merchant\":\"cold_storage\",\"amount_sgd\":45.0,\"is_fcy\":false}; "
-    "'klook 320 fcy' → {\"merchant\":\"klook\",\"amount_sgd\":320.0,\"is_fcy\":true}; "
-    "'don don donki 88.50' → {\"merchant\":\"don_don_donki\",\"amount_sgd\":88.5,\"is_fcy\":false}"
+    "'Cold Storage 45' → {\"merchant\":\"cold_storage\",\"amount_sgd\":45.0,\"is_fcy\":false,\"extra_categories\":[]}; "
+    "'klook 320 fcy' → {\"merchant\":\"klook\",\"amount_sgd\":320.0,\"is_fcy\":true,\"extra_categories\":[]}; "
+    "'agoda 450000 idr' → {\"merchant\":\"agoda\",\"amount_sgd\":36.0,\"is_fcy\":true,\"extra_categories\":[\"seasia_fcy\"]}; "
+    "'don don donki 88.50' → {\"merchant\":\"don_don_donki\",\"amount_sgd\":88.5,\"is_fcy\":false,\"extra_categories\":[]}"
 )
 
 _MODEL = "gemma-4-31b-it"

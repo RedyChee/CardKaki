@@ -7,7 +7,7 @@ Status as of 2026-05-06; checkboxes reflect what's shipped.
 The smallest thing that's already useful. No state, no caps, no logging.
 
 - [x] Repo + dependencies (`python-telegram-bot`, `pyyaml`, `pydantic`, `pytest`)
-- [x] `cards.yaml` for 6–8 cards I actually own + popular ones (HSBC Revo, UOB PPV/VS/PRVI, Citi Rewards/PM, DBS Altitude, Amex KF)
+- [x] `cards.yaml` for 6–8 cards I actually own + popular ones (HSBC Revo + 8mpd enhanced tier, UOB PPV/VS/PRVI/Lady/Lady's Solitaire/Solitaire Metal, Citi Rewards/PM, DBS Altitude/Woman's World, Amex KF, Maybank XL)
 - [x] `merchants.yaml` seed list (~50 SG merchants)
 - [x] `rule_engine.py` — `recommend()` function with rounding + FCY
 - [x] `tests/` — 20+ pytest cases covering edge cases (UOB rounding, FCY fees, MCC exclusions)
@@ -25,6 +25,7 @@ If friends keep typo-ing, add an LLM input parser as a thin shell:
 - [x] Falls back to regex parser on LLM failure; auto-disabled when `GEMINI_API_KEY` is absent
 - [x] LLM **only** produces structured input; never decides cards
 - [x] Infers `is_fcy` from currency codes (usd, eur, gbp, …) in addition to the explicit `fcy` keyword
+- [x] Surfaces `seasia_fcy` extra category for IDR/MYR/THB/VND so UOB PRVI's 3mpd SE-Asia FCY rule fires
 
 ## v2 — Logging & cap awareness (week 3–4)
 

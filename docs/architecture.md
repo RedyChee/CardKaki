@@ -181,6 +181,14 @@ When the user logs a transaction, we don't just want to know "how many miles" â€
 
 This means **past txns stick to the bonus they qualified for** at log time, even if `cards.yaml` is later edited. A reorg of the bonus list doesn't retroactively rewrite history.
 
+### 3.7a Tiered bonus rules
+
+A `Bonus` may carry a `tier` field (`"regular"` or `"enhanced"`). When set, the rule engine fires it only if the user's stored tier for that card matches; missing/None defaults to `"regular"`. HSBC Revolution uses this for its 4mpd / 8mpd split (S$50K+ EGA ADB unlocks the enhanced 8mpd cap S$1.2k tier introduced 1 Apr 2026). User-side state lives in `card_tiers` in SQLite; bot exposes `/hsbc_tier <regular|enhanced>` to set it.
+
+### 3.7b `extra_categories` from the LLM parser
+
+`ParsedInput.extra_categories` is a small escape hatch for the LLM parser to surface category tags that aren't tied to a merchant lookup. Currently used only for `seasia_fcy` (injected when the parsed currency is IDR/MYR/THB/VND), which lets UOB PRVI's 3mpd SE-Asia FCY rule fire without modeling a per-currency field on the bonus.
+
 ### 3.8 Failure modes
 
 | What goes wrong | What the engine does |

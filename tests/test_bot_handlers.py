@@ -14,6 +14,7 @@ from cardkaki.bot import (
     format_statement_day_prompt,
     format_wallet_keyboard,
     handle_cards_command,
+    handle_hsbc_tier_command,
     handle_lady_choice_command,
     handle_log_command,
     handle_pools_command,
@@ -448,6 +449,36 @@ async def test_recommendation_uses_lady_choice_when_owned(storage, catalog, merc
     # kopitiam → [dining_local, contactless]; lady_choice = dining_local → injects lady_chosen
     # Lady's bonus 4mpd fires: 50 * 4 = 200 mi
     assert payload.recs[0].miles == 200
+
+
+async def test_hsbc_tier_command_default_shows_regular(storage):
+    text, kb = await handle_hsbc_tier_command([], 1, storage)
+    assert "regular" in text.lower()
+
+
+async def test_hsbc_tier_command_sets_enhanced(storage):
+    text, _ = await handle_hsbc_tier_command(["enhanced"], 1, storage)
+    assert "enhanced" in text.lower()
+    tiers = await storage.get_card_tiers(1)
+    assert tiers["hsbc_revo"] == "enhanced"
+
+
+async def test_hsbc_tier_command_rejects_invalid(storage):
+    text, _ = await handle_hsbc_tier_command(["platinum"], 1, storage)
+    assert "❌" in text or "regular" in text.lower()
+
+
+async def test_recommendation_uses_card_tier_for_hsbc(storage, catalog, merchants):
+    """Enhanced-tier user querying an online txn earns 8mpd vs regular's 4mpd."""
+    await storage.add_card(1, "hsbc_revo")
+    await storage.set_card_tier(1, "hsbc_revo", "enhanced")
+    payload = await compute_recommendation_payload(
+        "shopee 100", 1, storage, catalog, merchants, today=date(2026, 5, 4)
+    )
+    hsbc = next((r for r in payload.recs if r.card_id == "hsbc_revo"), None)
+    assert hsbc is not None
+    # 100 * 8 mpd = 800 mi (vs 400 in regular tier)
+    assert hsbc.miles == 800
 
 
 # ---------------------------------------------------------------------------

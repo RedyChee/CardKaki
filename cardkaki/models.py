@@ -29,6 +29,7 @@ class Bonus(BaseModel):
         "anniversary_year",
     ] | None = None
     label: str | None = None
+    tier: Literal["regular", "enhanced"] | None = None
 
 
 class Card(BaseModel):
@@ -58,6 +59,7 @@ class ParsedInput(BaseModel):
     merchant: str
     amount_sgd: float = Field(gt=0)
     is_fcy: bool = False
+    extra_categories: list[str] = Field(default_factory=list)
 
 
 class Recommendation(BaseModel):
